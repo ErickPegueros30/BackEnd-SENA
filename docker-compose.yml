@@ -1,0 +1,25 @@
+version: "3.8"
+services:
+  db:
+    image: postgres:15
+    container_name: sena-db
+    environment:
+      POSTGRES_USER: AdminSENA
+      POSTGRES_PASSWORD: Sena123
+      POSTGRES_DB: SENA
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  flyway:
+    image: flyway/flyway
+    container_name: sena-flyway
+    depends_on:
+      - db
+    command: -url=jdbc:postgresql://db:5432/SENA -user=AdminSENA -password=Sena123 migrate
+    volumes:
+      - ./migrations:/flyway/sql
+
+volumes:
+  pgdata:
