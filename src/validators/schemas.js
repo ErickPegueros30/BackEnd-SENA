@@ -4,7 +4,7 @@ import { z } from 'zod';
 const reName = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s'-]{2,60}$/;
 const reLast = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{2,25}$/;
 const rePass = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[ @$!%*?&.#-]).{8,64}$/;
-const roles = ['A','AP','T','E','I','AL','J'];
+const roles = ['A','E','C'];
 
 const norm = (s) => (typeof s === 'string' ? s.trim() : s);
 
@@ -14,10 +14,7 @@ export const registerSchema = z.object({
   primer_apellido: z.string().regex(reLast, 'Primer apellido inválido').transform(norm),
   segundo_apellido: z
     .string()
-    .regex(/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{0,25}$/, 'Segundo apellido inválido')
-    .transform(norm)
-    .optional()
-    .default(''),
+    .regex(reLast, 'Segundo apellido inválido').transform(norm),
   id_rol: z.enum(roles, { message: 'Rol inválido' }),
   correo: z.string().email('Correo inválido').max(120).transform((s) => norm(s)?.toLowerCase()),
   contrasena: z.string().regex(rePass, 'Contraseña insegura'),

@@ -1,3 +1,4 @@
+// Archivo para probar la conexión a la base de datos y la configuración de zona horaria
 import 'dotenv/config';
 import pool from './src/config/db.js';
 
