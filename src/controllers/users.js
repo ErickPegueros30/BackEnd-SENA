@@ -4,7 +4,7 @@ import { createUser as svcCreateUser } from '../services/userService.js';
 
 export const listUsers = async (req, res) => {
   try {
-        const q = `SELECT c.id_credencial, c.correo, c.id_usuario, c.id_rol, c.activo, c.ultima_actividad, u.nombre, u.primer_apellido, u.segundo_apellido
+        const q = `SELECT c.id_credencial, c.correo, c.id_usuario, c.id_rol, c.activo, c.ultima_actividad, u.nombre, u.primer_apellido, u.segundo_apellido, u.foto_perfil
           FROM credenciales c
           JOIN usuarios u ON c.id_usuario = u.id_usuario
           ORDER BY u.nombre`;
@@ -18,7 +18,8 @@ export const listUsers = async (req, res) => {
       segundo_apellido: r.segundo_apellido,
       id_rol: r.id_rol,
       active: r.activo === undefined ? true : !!r.activo,
-      ultima_actividad: r.ultima_actividad || null
+      ultima_actividad: r.ultima_actividad || null,
+      foto_perfil: r.foto_perfil || null
     }));
     return res.json({ ok: true, data: users });
   } catch (err) {
@@ -30,7 +31,7 @@ export const listUsers = async (req, res) => {
 export const getUser = async (req, res) => {
   try {
     const { id } = req.params;
-        const q = `SELECT c.id_credencial, c.correo, c.id_usuario, c.id_rol, c.activo, c.ultima_actividad, u.nombre, u.primer_apellido, u.segundo_apellido
+        const q = `SELECT c.id_credencial, c.correo, c.id_usuario, c.id_rol, c.activo, c.ultima_actividad, u.nombre, u.primer_apellido, u.segundo_apellido, u.foto_perfil
           FROM credenciales c
           JOIN usuarios u ON c.id_usuario = u.id_usuario
           WHERE c.id_usuario = $1`;
@@ -46,7 +47,8 @@ export const getUser = async (req, res) => {
       segundo_apellido: r.segundo_apellido,
       id_rol: r.id_rol,
       active: r.activo === undefined ? true : !!r.activo,
-      ultima_actividad: r.ultima_actividad || null
+      ultima_actividad: r.ultima_actividad || null,
+      foto_perfil: r.foto_perfil || null
     };
     return res.json({ ok: true, data: user });
   } catch (err) {

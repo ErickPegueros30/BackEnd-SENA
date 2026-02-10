@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import { Router, json as expressJson } from 'express'
 import verifyToken from '../middlewares/verifyToken.mjs'
 import * as profileCtrl from '../../controllers/profile.js'
 
@@ -10,7 +10,8 @@ router.get('/', profileCtrl.getProfile)
 router.put('/', profileCtrl.updateProfile)
 
 // Avatar endpoints accept base64 JSON payload { avatar: 'data:image/..;base64,...' }
-router.post('/avatar', profileCtrl.uploadAvatar)
+// Increase allowed JSON payload size for avatar uploads (data URLs can be large)
+router.post('/avatar', expressJson({ limit: '5mb' }), profileCtrl.uploadAvatar)
 router.delete('/avatar', profileCtrl.deleteAvatar)
 
 router.get('/sessions', profileCtrl.listSessions)

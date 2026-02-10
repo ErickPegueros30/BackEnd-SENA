@@ -1,4 +1,4 @@
--- Active: 1769035941104@@localhost@5433@SENA
+-- Active: 1769806382337@@localhost@5433@SENA
 CREATE TABLE roles (
     id_rol VARCHAR(10) PRIMARY KEY,        
     nombre VARCHAR(50) NOT NULL UNIQUE,

@@ -1,4 +1,4 @@
--- Active: 1769035941104@@localhost@5433@SENA
+-- Active: 1769806382337@@localhost@5433@SENA
 -- Migration: Create events table and participants link table
 CREATE TABLE IF NOT EXISTS eventos (
   id_evento SERIAL PRIMARY KEY,
