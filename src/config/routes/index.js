@@ -5,6 +5,9 @@ import authController, { login } from '../../controllers/auth.js';
 import usersRouter from './users.js';
 import profileRouter from './profile.js';
 import eventsRouter from './events.js';
+import areasRouter from './areas.js';
+import ramasRouter from './ramas.js';
+import inscripcionesRouter from './inscripciones.js';
 
 const router = Router();
 
@@ -24,5 +27,10 @@ router.use('/users', usersRouter);
 router.use('/profile', profileRouter);
 // Events (public listing; protected create/update/delete)
 router.use('/events', eventsRouter);
+// Catalogs
+router.use('/areas', areasRouter);
+router.use('/ramas', ramasRouter);
+// Inscripciones (registro de asistentes a eventos/cursos)
+router.use('/inscripciones', inscripcionesRouter);
 
 export default router;

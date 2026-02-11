@@ -1,0 +1,7 @@
+-- Add icon column to areas and ramas
+BEGIN;
+
+ALTER TABLE IF EXISTS areas ADD COLUMN IF NOT EXISTS icon TEXT NULL;
+ALTER TABLE IF EXISTS ramas ADD COLUMN IF NOT EXISTS icon TEXT NULL;
+
+COMMIT;

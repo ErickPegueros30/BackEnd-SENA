@@ -20,14 +20,6 @@ CREATE TABLE IF NOT EXISTS eventos (
   updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now()
 );
 
--- Optional participants join table
-CREATE TABLE IF NOT EXISTS evento_participantes (
-  id SERIAL PRIMARY KEY,
-  evento_id INTEGER REFERENCES eventos(id_evento) ON DELETE CASCADE,
-  usuario_id INTEGER REFERENCES usuarios(id_usuario) ON DELETE CASCADE,
-  created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now()
-);
-
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_eventos_inicio_fecha ON eventos(inicio_fecha);
 -- Restrict estado to a known set
