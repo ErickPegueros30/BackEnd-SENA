@@ -2,11 +2,15 @@ import pool from '../config/db.js'
 
 export const listInscripciones = async (req, res) => {
   try {
-    const { page = 1, limit = 100, tipo, eventoId, cursoId } = req.query
+    const { page = 1, limit = 100 } = req.query
+    // accept either eventoId or evento_id, same for curso
+    const tipo = req.query.tipo
+    const eventoId = req.query.eventoId || req.query.evento_id
+    const cursoId = req.query.cursoId || req.query.curso_id
     const offset = (Number(page) - 1) * Number(limit)
     const params = []
     let where = ''
-    if (tipo) { params.push(tipo); where += ` AND tipo = $${params.length}` }
+    if (tipo) { if (['evento','curso'].includes(tipo)) { params.push(tipo); where += ` AND tipo = $${params.length}` } }
     if (eventoId) { params.push(eventoId); where += ` AND evento_id = $${params.length}` }
     if (cursoId) { params.push(cursoId); where += ` AND curso_id = $${params.length}` }
 

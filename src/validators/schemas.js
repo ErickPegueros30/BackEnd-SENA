@@ -25,3 +25,24 @@ export const loginSchema = z.object({
   username: z.string().email('Correo inválido').max(120).transform((s) => norm(s)?.toLowerCase()),
   password: z.string().min(8).max(64),
 });
+
+// Inscripciones
+export const inscripcionCreateSchema = z.object({
+  nombre: z.string().regex(reName, 'Nombre inválido').transform(norm),
+  primer_apellido: z.string().regex(reLast, 'Primer apellido inválido').transform(norm),
+  segundo_apellido: z.string().optional().transform((s) => (s ? norm(s) : undefined)),
+  correo: z.string().email('Correo inválido').max(255).transform((s) => norm(s)?.toLowerCase()),
+  telefono: z.string().max(50).optional().transform((s) => (s ? norm(s) : undefined)),
+  empresa: z.string().max(255).optional().transform((s) => (s ? norm(s) : undefined)),
+  cargo: z.string().max(255).optional().transform((s) => (s ? norm(s) : undefined)),
+  area_id: z.number().int().positive().optional(),
+  subarea_id: z.number().int().positive().optional(),
+  rama_id: z.number().int().positive().optional(),
+  subrama_id: z.number().int().positive().optional(),
+  difusion: z.string().max(100).optional().transform((s) => (s ? norm(s) : undefined)),
+  tipo: z.enum(['evento', 'curso']),
+  evento_id: z.number().int().positive().optional(),
+  curso_id: z.number().int().positive().optional(),
+});
+
+export const inscripcionUpdateSchema = inscripcionCreateSchema.partial();

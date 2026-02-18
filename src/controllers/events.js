@@ -26,7 +26,7 @@ const toClientEvent = (row, req = null) => ({
   endTime: row.fin_hora ? row.fin_hora : null,
   status: row.estado,
   statusLabel: row.estado,
-  modality: row.modalidad || 'presencial',
+  modality: row.modalidad || 'virtual',
   location: row.ubicacion,
   maxParticipants: row.max_participants,
   notes: row.notas,
@@ -77,10 +77,11 @@ export const getEvent = async (req, res) => {
 
 export const createEvent = async (req, res) => {
   try {
+    console.log('createEvent body:', req.body)
     const { title, description, type, location, startDate, endDate, startTime, endTime, maxParticipants, notes, organizerId, status, modality, featured } = req.body
-    const q = `INSERT INTO eventos (titulo, descripcion, tipo, ubicacion, inicio_fecha, fin_fecha, inicio_hora, fin_hora, max_participants, notas, organizador_id, estado, featured, created_at, updated_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, now(), now()) RETURNING *`
-    const params = [title, description, type, location, startDate || null, endDate || null, startTime || null, endTime || null, maxParticipants || 0, notes || null, organizerId || null, status || 'activo', (featured != null ? featured : false)]
+    const q = `INSERT INTO eventos (titulo, descripcion, tipo, ubicacion, inicio_fecha, fin_fecha, inicio_hora, fin_hora, max_participants, notas, organizador_id, estado, modalidad, featured, created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14, now(), now()) RETURNING *`
+    const params = [title, description, type, location, startDate || null, endDate || null, startTime || null, endTime || null, maxParticipants || 0, notes || null, organizerId || null, status || 'activo', modality || 'virtual', (featured != null ? featured : false)]
     const result = await pool.query(q, params)
     const row = result.rows[0]
 
@@ -113,9 +114,10 @@ export const createEvent = async (req, res) => {
 export const updateEvent = async (req, res) => {
   try {
     const { id } = req.params
+    console.log('updateEvent body:', req.body)
     const { title, description, type, location, startDate, endDate, startTime, endTime, maxParticipants, notes, organizerId, status, modality, featured } = req.body
-    const q = `UPDATE eventos SET titulo = COALESCE($1, titulo), descripcion = COALESCE($2, descripcion), tipo = COALESCE($3, tipo), ubicacion = COALESCE($4, ubicacion), inicio_fecha = COALESCE($5, inicio_fecha), fin_fecha = COALESCE($6, fin_fecha), inicio_hora = COALESCE($7, inicio_hora), fin_hora = COALESCE($8, fin_hora), max_participants = COALESCE($9, max_participants), notas = COALESCE($10, notas), organizador_id = COALESCE($11, organizador_id), estado = COALESCE($12, estado), featured = COALESCE($13, featured), updated_at = now() WHERE id_evento = $14 RETURNING *`
-    const params = [title, description, type, location, startDate || null, endDate || null, startTime || null, endTime || null, maxParticipants || 0, notes || null, organizerId || null, status || null, (featured != null ? featured : null), id]
+    const q = `UPDATE eventos SET titulo = COALESCE($1, titulo), descripcion = COALESCE($2, descripcion), tipo = COALESCE($3, tipo), ubicacion = COALESCE($4, ubicacion), inicio_fecha = COALESCE($5, inicio_fecha), fin_fecha = COALESCE($6, fin_fecha), inicio_hora = COALESCE($7, inicio_hora), fin_hora = COALESCE($8, fin_hora), max_participants = COALESCE($9, max_participants), notas = COALESCE($10, notas), organizador_id = COALESCE($11, organizador_id), estado = COALESCE($12, estado), modalidad = COALESCE($13, modalidad), featured = COALESCE($14, featured), updated_at = now() WHERE id_evento = $15 RETURNING *`
+    const params = [title, description, type, location, startDate || null, endDate || null, startTime || null, endTime || null, maxParticipants || 0, notes || null, organizerId || null, status || null, modality || null, (featured != null ? featured : null), id]
     const result = await pool.query(q, params)
     if (result.rowCount === 0) return res.status(404).json({ ok: false, message: 'Evento no encontrado' })
     const row = result.rows[0]
