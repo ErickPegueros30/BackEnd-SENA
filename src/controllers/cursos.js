@@ -2,7 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import pool from '../config/db.js'
 
-const UPLOADS_COURSES_DIR = path.join(process.cwd(), 'uploads', 'events')
+const UPLOADS_COURSES_DIR = path.join(process.cwd(), 'uploads', 'courses')
 const ensureUploadsDirCourses = async () => {
   try { await fs.promises.mkdir(UPLOADS_COURSES_DIR, { recursive: true }) } catch (e) { }
 }
@@ -13,6 +13,15 @@ const buildThumbnailUrl = (req, miniatura) => {
   return `${req.protocol}://${req.get('host')}${miniatura.startsWith('/') ? '' : '/'}${miniatura}`
 }
 
+const safeDate = (d) => {
+  if (!d) return null
+  try {
+    const dt = d instanceof Date ? d : new Date(d)
+    if (isNaN(dt.getTime())) return null
+    return dt
+  } catch (e) { return null }
+}
+
 const toClientCourse = (row, req = null) => ({
   id: row.id_curso,
   title: row.titulo,
@@ -21,20 +30,42 @@ const toClientCourse = (row, req = null) => ({
   typeLabel: row.tipo,
   status: row.estado,
   modality: row.modalidad || 'presencial',
+  modalidad: row.modalidad || 'presencial',
+  // nivel / labels: DB may store nivel or tipo; provide both to frontend
+  nivel: row.nivel || row.tipo || null,
+  nivelLabel: row.nivel || row.tipo || null,
   location: row.ubicacion,
-  startDate: row.inicio_fecha ? row.inicio_fecha.toISOString().split('T')[0] : null,
-  endDate: row.fin_fecha ? row.fin_fecha.toISOString().split('T')[0] : null,
+  startDate: (() => { const sd = safeDate(row.inicio_fecha); return sd ? sd.toISOString().split('T')[0] : null })(),
+  endDate: (() => { const ed = safeDate(row.fin_fecha); return ed ? ed.toISOString().split('T')[0] : null })(),
+  fechaInicio: (() => { const sd = safeDate(row.inicio_fecha); return sd ? sd.toISOString().split('T')[0] : null })(),
+  fechaFin: (() => { const ed = safeDate(row.fin_fecha); return ed ? ed.toISOString().split('T')[0] : null })(),
   startTime: row.inicio_hora || null,
   endTime: row.fin_hora || null,
   maxParticipants: row.max_participants,
+  capacidad: row.max_participants,
   notes: row.notas,
-  createdAt: row.created_at ? row.created_at.toISOString() : null,
-  updatedAt: row.updated_at ? row.updated_at.toISOString() : null,
+  temario: (() => {
+    const t = row.temario || []
+    if (!t) return []
+    if (typeof t === 'string') {
+      try { return JSON.parse(t) } catch (e) { return [String(t)] }
+    }
+    return Array.isArray(t) ? t : [t]
+  })(),
+  featured: !!row.featured,
+  instructor: {
+    id: row.organizador_id || row.organizer_id || null,
+    name: row.org_nombre ? `${row.org_nombre}${row.org_primer_apellido ? ' ' + row.org_primer_apellido : ''}` : null,
+    avatar: req ? buildThumbnailUrl(req, row.org_foto) : (row.org_foto || null)
+  },
+  createdAt: (() => { const d = safeDate(row.created_at); return d ? d.toISOString() : null })(),
+  updatedAt: (() => { const d = safeDate(row.updated_at); return d ? d.toISOString() : null })(),
   thumbnailUrl: req ? buildThumbnailUrl(req, row.miniatura) : (row.miniatura || null)
 })
 
 export const listCursos = async (req, res) => {
   try {
+    // listCursos called
     const { page = 1, limit = 50, status, search } = req.query
     const offset = (Number(page) - 1) * Number(limit)
     const params = []
@@ -42,21 +73,35 @@ export const listCursos = async (req, res) => {
     if (status) { params.push(status); where += ` AND c.estado = $${params.length}` }
     if (search) { params.push(`%${search}%`); where += ` AND (c.titulo ILIKE $${params.length} OR c.descripcion ILIKE $${params.length})` }
 
-    const q = `SELECT c.* FROM cursos c WHERE 1=1 ${where} ORDER BY c.inicio_fecha DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`
+        const q = `SELECT c.*, u.id_usuario AS organizer_id, u.nombre AS org_nombre, u.primer_apellido AS org_primer_apellido, u.foto_perfil AS org_foto
+          FROM cursos c LEFT JOIN usuarios u ON c.organizador_id::text = u.id_usuario::text
+          WHERE 1=1 ${where} ORDER BY c.inicio_fecha DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`
     params.push(Number(limit), offset)
+    // createCurso SQL prepared
     const result = await pool.query(q, params)
-    const rows = result.rows.map(r => toClientCourse(r, req))
+    const rows = []
+    for (const r of result.rows) {
+      try {
+        rows.push(toClientCourse(r, req))
+      } catch (e) {
+        console.error('toClientCourse mapping error for row:', r, e && e.stack ? e.stack : e)
+        // Skip problematic row but continue returning others
+      }
+    }
     return res.json(rows)
   } catch (err) {
-    console.error('listCursos error', err)
-    return res.status(500).json({ ok: false, message: 'Error listando cursos' })
+    console.error('listCursos error', err && err.stack ? err.stack : err)
+    return res.status(500).json({ ok: false, message: 'Error listando cursos', error: err && err.message ? err.message : String(err) })
   }
 }
 
 export const getCurso = async (req, res) => {
   try {
+    // getCurso called
     const { id } = req.params
-    const q = `SELECT * FROM cursos WHERE id_curso = $1`
+        const q = `SELECT c.*, u.id_usuario AS organizer_id, u.nombre AS org_nombre, u.primer_apellido AS org_primer_apellido, u.foto_perfil AS org_foto
+          FROM cursos c LEFT JOIN usuarios u ON c.organizador_id::text = u.id_usuario::text
+          WHERE id_curso = $1`
     const result = await pool.query(q, [id])
     const row = result.rows[0]
     if (!row) return res.status(404).json({ ok: false, message: 'Curso no encontrado' })
@@ -69,12 +114,40 @@ export const getCurso = async (req, res) => {
 
 export const createCurso = async (req, res) => {
   try {
-    const { title, description, type, location, startDate, endDate, startTime, endTime, maxParticipants, notes, organizerId, status, modality } = req.body
-    const q = `INSERT INTO cursos (titulo, descripcion, tipo, ubicacion, inicio_fecha, fin_fecha, inicio_hora, fin_hora, max_participants, notas, organizador_id, estado, modalidad, created_at, updated_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, now(), now()) RETURNING *`
-    const params = [title, description, type, location, startDate || null, endDate || null, startTime || null, endTime || null, maxParticipants || 0, notes || null, organizerId || null, status || 'activo', modality || 'presencial']
+    // createCurso called
+        // Normalize incoming field names (accept both English and Spanish payload keys)
+        const title = req.body.title || req.body.titulo || null
+        const description = req.body.description || req.body.descripcion || null
+        const type = req.body.type || req.body.tipo || null
+        const location = req.body.location || req.body.ubicacion || null
+        const startDate = req.body.startDate || req.body.inicio_fecha || null
+        const endDate = req.body.endDate || req.body.fin_fecha || null
+        const startTime = req.body.startTime || req.body.inicio_hora || null
+        const endTime = req.body.endTime || req.body.fin_hora || null
+        const maxParticipants = req.body.maxParticipants || req.body.max_participants || 0
+        const notes = req.body.notes || req.body.notas || null
+        const organizerId = req.body.organizerId || req.body.organizador_id || req.body.organizer_id || null
+        const instructorId = req.body.instructorId || req.body.instructor_id || null
+        const temario = req.body.temario || null
+        const status = req.body.status || req.body.estado || null
+        const modality = req.body.modality || req.body.modalidad || null
+        const q = `INSERT INTO cursos (titulo, descripcion, tipo, ubicacion, inicio_fecha, fin_fecha, inicio_hora, fin_hora, max_participants, notas, organizador_id, temario, estado, modalidad, created_at, updated_at)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14, now(), now()) RETURNING *`
+        const jsonTemario = temario ? JSON.stringify(temario) : JSON.stringify([])
+        const parseIntIfNumeric = (v) => {
+          if (v === null || v === undefined) return null
+          if (typeof v === 'number') return v
+          const s = String(v)
+          if (/^[0-9]+$/.test(s)) return parseInt(s, 10)
+          // preserve non-numeric IDs (e.g. 'A0002') as strings so they can be stored
+          return s.length ? s : null
+        }
+        const organizadorParam = parseIntIfNumeric(instructorId || organizerId) || null
+        const params = [title, description, type, location, startDate || null, endDate || null, startTime || null, endTime || null, maxParticipants || 0, notes || null, organizadorParam, jsonTemario, status || 'activo', modality || 'presencial']
+    console.debug('updateCurso sql', q, params)
     const result = await pool.query(q, params)
     const row = result.rows[0]
+    console.debug('createCurso inserted row id:', row && row.id_curso)
 
     // thumbnail handling (if provided as dataURL)
     if (req.body.thumbnailDataUrl) {
@@ -87,7 +160,7 @@ export const createCurso = async (req, res) => {
           const data = matches[2]
           const buffer = Buffer.from(data, 'base64')
           const filename = `${row.id_curso}.${ext}`
-          const relPath = `/uploads/events/${filename}`
+          const relPath = `/uploads/courses/${filename}`
           const filepath = path.join(UPLOADS_COURSES_DIR, filename)
           await fs.promises.writeFile(filepath, buffer)
           await pool.query('UPDATE cursos SET miniatura = $1 WHERE id_curso = $2', [relPath, row.id_curso])
@@ -97,20 +170,48 @@ export const createCurso = async (req, res) => {
     }
     return res.status(201).json(toClientCourse(row, req))
   } catch (err) {
-    console.error('createCurso error', err)
-    return res.status(500).json({ ok: false, message: 'Error creando curso' })
+    console.error('createCurso error', err && err.stack ? err.stack : err)
+    return res.status(500).json({ ok: false, message: 'Error creando curso', error: err && err.message ? err.message : String(err) })
   }
 }
 
 export const updateCurso = async (req, res) => {
   try {
+    // updateCurso called
     const { id } = req.params
-    const { title, description, type, location, startDate, endDate, startTime, endTime, maxParticipants, notes, organizerId, status, modality } = req.body
-    const q = `UPDATE cursos SET titulo = COALESCE($1, titulo), descripcion = COALESCE($2, descripcion), tipo = COALESCE($3, tipo), ubicacion = COALESCE($4, ubicacion), inicio_fecha = COALESCE($5, inicio_fecha), fin_fecha = COALESCE($6, fin_fecha), inicio_hora = COALESCE($7, inicio_hora), fin_hora = COALESCE($8, fin_hora), max_participants = COALESCE($9, max_participants), notas = COALESCE($10, notas), organizador_id = COALESCE($11, organizador_id), estado = COALESCE($12, estado), modalidad = COALESCE($13, modalidad), updated_at = now() WHERE id_curso = $14 RETURNING *`
-    const params = [title, description, type, location, startDate || null, endDate || null, startTime || null, endTime || null, maxParticipants || 0, notes || null, organizerId || null, status || null, modality || null, id]
+    // Normalize incoming field names for update as well
+    const titleU = req.body.title || req.body.titulo || null
+    const descriptionU = req.body.description || req.body.descripcion || null
+    const typeU = req.body.type || req.body.tipo || null
+    const locationU = req.body.location || req.body.ubicacion || null
+    const startDateU = req.body.startDate || req.body.inicio_fecha || null
+    const endDateU = req.body.endDate || req.body.fin_fecha || null
+    const startTimeU = req.body.startTime || req.body.inicio_hora || null
+    const endTimeU = req.body.endTime || req.body.fin_hora || null
+    const maxParticipantsU = req.body.maxParticipants || req.body.max_participants || null
+    const notesU = req.body.notes || req.body.notas || null
+    const organizerIdU = req.body.organizerId || req.body.organizador_id || req.body.organizer_id || null
+    const instructorIdU = req.body.instructorId || req.body.instructor_id || null
+    const temarioU = req.body.temario || null
+    const statusU = req.body.status || req.body.estado || null
+    const modalityU = req.body.modality || req.body.modalidad || null
+    const jsonTemarioUp = temarioU ? JSON.stringify(temarioU) : null
+    const parseIntIfNumeric = (v) => {
+      if (v === null || v === undefined) return null
+      if (typeof v === 'number') return v
+      const s = String(v)
+      if (/^[0-9]+$/.test(s)) return parseInt(s, 10)
+      // preserve non-numeric IDs (e.g. 'A0002') as strings so they can be stored
+      return s.length ? s : null
+    }
+    const organizadorParamU = parseIntIfNumeric(instructorIdU || organizerIdU) || null
+    const q = `UPDATE cursos SET titulo = COALESCE($1, titulo), descripcion = COALESCE($2, descripcion), tipo = COALESCE($3, tipo), ubicacion = COALESCE($4, ubicacion), inicio_fecha = COALESCE($5, inicio_fecha), fin_fecha = COALESCE($6, fin_fecha), inicio_hora = COALESCE($7, inicio_hora), fin_hora = COALESCE($8, fin_hora), max_participants = COALESCE($9, max_participants), notas = COALESCE($10, notas), organizador_id = COALESCE($11, organizador_id), temario = COALESCE($12::jsonb, temario), estado = COALESCE($13, estado), modalidad = COALESCE($14, modalidad), updated_at = now() WHERE id_curso = $15 RETURNING *`
+    const params = [titleU, descriptionU, typeU, locationU, startDateU || null, endDateU || null, startTimeU || null, endTimeU || null, maxParticipantsU || 0, notesU || null, organizadorParamU, jsonTemarioUp, statusU || null, modalityU || null, id]
+    // updateCurso SQL prepared
     const result = await pool.query(q, params)
     if (result.rowCount === 0) return res.status(404).json({ ok: false, message: 'Curso no encontrado' })
     const row = result.rows[0]
+    // updateCurso result obtained
 
     if (req.body.thumbnailDataUrl) {
       try {
@@ -122,7 +223,7 @@ export const updateCurso = async (req, res) => {
           const data = matches[2]
           const buffer = Buffer.from(data, 'base64')
           const filename = `${row.id_curso}.${ext}`
-          const relPath = `/uploads/events/${filename}`
+          const relPath = `/uploads/courses/${filename}`
           const filepath = path.join(UPLOADS_COURSES_DIR, filename)
           await fs.promises.writeFile(filepath, buffer)
           await pool.query('UPDATE cursos SET miniatura = $1 WHERE id_curso = $2', [relPath, row.id_curso])
@@ -160,4 +261,47 @@ export const deleteCurso = async (req, res) => {
   }
 }
 
-export default { listCursos, getCurso, createCurso, updateCurso, deleteCurso }
+export const uploadThumbnail = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { thumbnail } = req.body
+    if (!thumbnail) return res.status(400).json({ ok: false, message: 'thumbnail missing' })
+    await ensureUploadsDirCourses()
+    const matches = thumbnail.match(/^data:(image\/\w+);base64,(.+)$/)
+    if (!matches) return res.status(400).json({ ok: false, message: 'Invalid thumbnail format' })
+    const mime = matches[1]
+    const ext = mime.split('/')[1] || 'jpg'
+    const data = matches[2]
+    const buffer = Buffer.from(data, 'base64')
+    const filename = `${id}.${ext}`
+    const relPath = `/uploads/courses/${filename}`
+    const filepath = path.join(UPLOADS_COURSES_DIR, filename)
+    await fs.promises.writeFile(filepath, buffer)
+    await pool.query('UPDATE cursos SET miniatura = $1 WHERE id_curso = $2', [relPath, id])
+    const url = buildThumbnailUrl(req, relPath)
+    return res.json({ ok: true, thumbnailUrl: url })
+  } catch (err) {
+    console.error('uploadThumbnail error', err)
+    return res.status(500).json({ ok: false, message: 'Error subiendo miniatura' })
+  }
+}
+
+export const deleteThumbnail = async (req, res) => {
+  try {
+    const { id } = req.params
+    const r = await pool.query('SELECT miniatura FROM cursos WHERE id_curso = $1', [id])
+    const row = r.rows[0]
+    if (row && row.miniatura) {
+      const filename = path.basename(row.miniatura)
+      const filepath = path.join(UPLOADS_COURSES_DIR, filename)
+      if (fs.existsSync(filepath)) await fs.promises.unlink(filepath)
+      await pool.query('UPDATE cursos SET miniatura = NULL WHERE id_curso = $1', [id])
+    }
+    return res.json({ ok: true, message: 'Miniatura eliminada' })
+  } catch (err) {
+    console.error('deleteThumbnail error', err)
+    return res.status(500).json({ ok: false, message: 'Error eliminando miniatura' })
+  }
+}
+
+export default { listCursos, getCurso, createCurso, updateCurso, deleteCurso, uploadThumbnail, deleteThumbnail }

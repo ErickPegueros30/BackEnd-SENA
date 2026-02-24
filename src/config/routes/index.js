@@ -8,6 +8,7 @@ import eventsRouter from './events.js';
 import areasRouter from './areas.js';
 import ramasRouter from './ramas.js';
 import inscripcionesRouter from './inscripciones.js';
+import cursosRouter from './cursos.js';
 
 const router = Router();
 
@@ -32,5 +33,7 @@ router.use('/areas', areasRouter);
 router.use('/ramas', ramasRouter);
 // Inscripciones (registro de asistentes a eventos/cursos)
 router.use('/inscripciones', inscripcionesRouter);
+// Cursos
+router.use('/cursos', cursosRouter);
 
 export default router;

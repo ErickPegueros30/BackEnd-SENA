@@ -4,7 +4,10 @@ import * as usersCtrl from '../../controllers/users.js';
 
 const router = Router();
 
-// All routes protected by JWT middleware
+// Expose instructors list publicly (only returns admins/empleado roles)
+router.get('/instructors', usersCtrl.listInstructors);
+
+// All other routes protected by JWT middleware
 router.use(verifyToken);
 
 // GET /api/users/

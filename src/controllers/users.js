@@ -28,6 +28,25 @@ export const listUsers = async (req, res) => {
   }
 };
 
+export const listInstructors = async (req, res) => {
+  try {
+    // Join roles to match names containing admin or emple (flexible)
+    // Only return users whose credential role is Admin ('A') or Empleado ('E')
+    const q = `SELECT c.id_usuario, u.nombre, u.primer_apellido, u.segundo_apellido, c.id_rol, r.nombre AS rol_nombre, u.foto_perfil
+           FROM credenciales c
+           JOIN usuarios u ON c.id_usuario = u.id_usuario
+           LEFT JOIN roles r ON c.id_rol = r.id_rol
+           WHERE c.id_rol IN ('A','E')
+           ORDER BY u.nombre`;
+    const result = await pool.query(q);
+    const users = result.rows.map(r => ({ id: r.id_usuario, name: `${r.nombre} ${r.primer_apellido || ''}`.trim(), role: r.rol_nombre || r.id_rol, foto_perfil: r.foto_perfil || null }))
+    return res.json({ ok: true, data: users })
+  } catch (err) {
+    console.error('listInstructors error', err)
+    return res.status(500).json({ ok: false, message: 'Error al listar instructores' })
+  }
+}
+
 export const getUser = async (req, res) => {
   try {
     const { id } = req.params;
@@ -161,4 +180,4 @@ export const updateUser = async (req, res) => {
   }
 };
 
-export default { listUsers, getUser, createUser, updateStatus, deleteUser };
+export default { listUsers, listInstructors, getUser, createUser, updateStatus, updateLastActivity, deleteUser, updateUser };
