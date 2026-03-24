@@ -46,3 +46,33 @@ export const inscripcionCreateSchema = z.object({
 });
 
 export const inscripcionUpdateSchema = inscripcionCreateSchema.partial();
+
+// Precios - Areas
+export const precioAreaCreateSchema = z.object({
+  areaId: z.number().int().positive().optional(),
+  referencia: z.string().max(255).optional().transform(norm),
+  anio: z.number().int().positive().optional(),
+  descripcion: z.string().max(2000).optional().transform(norm),
+  precio_unitario: z.number().nonnegative().optional(),
+  precio_desc_13: z.number().nonnegative().optional(),
+  precio_ensayo_bilateral: z.number().nonnegative().optional(),
+  precio_desc_16: z.number().nonnegative().optional(),
+  precio_desc_19: z.number().nonnegative().optional(),
+  precio_usd: z.number().nonnegative().optional(),
+  precio_usd_desc_19: z.number().nonnegative().optional()
+});
+
+export const precioAreaUpdateSchema = precioAreaCreateSchema.partial();
+
+// Precios - Ramas
+export const precioRamaCreateSchema = z.object({
+  ramaId: z.number().int().positive().optional(),
+  referencia: z.string().max(255).optional().transform(norm),
+  anio: z.number().int().positive().optional(),
+  descripcion: z.string().max(2000).optional().transform(norm),
+  precio_unitario: z.number().nonnegative().optional(),
+  precio_bilateral: z.number().nonnegative().optional(),
+  precio_unitario_usd: z.number().nonnegative().optional()
+});
+
+export const precioRamaUpdateSchema = precioRamaCreateSchema.partial();

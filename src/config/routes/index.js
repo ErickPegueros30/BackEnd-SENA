@@ -7,6 +7,7 @@ import profileRouter from './profile.js';
 import eventsRouter from './events.js';
 import areasRouter from './areas.js';
 import ramasRouter from './ramas.js';
+import preciosRouter from './precios.js';
 import inscripcionesRouter from './inscripciones.js';
 import cursosRouter from './cursos.js';
 
@@ -31,6 +32,8 @@ router.use('/events', eventsRouter);
 // Catalogs
 router.use('/areas', areasRouter);
 router.use('/ramas', ramasRouter);
+// Precios (catálogos de precios)
+router.use('/precios', preciosRouter);
 // Inscripciones (registro de asistentes a eventos/cursos)
 router.use('/inscripciones', inscripcionesRouter);
 // Cursos
