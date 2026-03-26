@@ -76,3 +76,28 @@ export const precioRamaCreateSchema = z.object({
 });
 
 export const precioRamaUpdateSchema = precioRamaCreateSchema.partial();
+
+// Cotizaciones
+export const cotizacionCreateSchema = z.object({
+  usuarioId: z.string().min(1).max(64),
+  nombre_cliente: z.string().max(255).transform(norm),
+  correo: z.string().email('Correo inválido').max(255).transform((s) => norm(s)?.toLowerCase()),
+  telefono: z.string().max(100),
+  empresa: z.string().max(255).optional().transform((s) => (s ? norm(s) : undefined)),
+  direccion: z.string().max(2000).optional().transform((s) => (s ? norm(s) : undefined)),
+  notas: z.string().max(2000).optional().transform((s) => (s ? norm(s) : undefined)),
+  vencimiento: z.string().optional(),
+  items: z.array(z.union([
+    z.object({ // catalog item
+      tipo: z.enum(['area','rama']),
+      precio_id: z.number().int().positive(),
+      cantidad: z.number().int().positive()
+    }),
+    z.object({ // manual item
+      tipo: z.literal('manual'),
+      descripcion: z.string().max(2000).optional().transform((s) => (s ? norm(s) : undefined)),
+      precioUnitario: z.number().nonnegative(),
+      cantidad: z.number().int().positive()
+    })
+  ])).nonempty()
+})
