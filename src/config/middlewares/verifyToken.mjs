@@ -14,8 +14,8 @@ export default function verifyToken(req, res, next) {
   jwt.verify(token, process.env.JWT_SECRET || 'clave_secreta_segura', (err, user) => {
     if (err)
       return res.status(403).json({ message: 'Token inválido.' });
-
-    req.user = user;
+    // Algunos tokens se firmaron con { user: {...} }; normalizamos a `req.user` para compatibilidad
+    req.user = (user && user.user) ? user.user : user;
     next();
   });
 }
