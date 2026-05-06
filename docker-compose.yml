@@ -7,10 +7,13 @@ services:
       POSTGRES_USER: AdminSENA
       POSTGRES_PASSWORD: Sena123
       POSTGRES_DB: SENA
+    # map to host 5434 to avoid conflict with existing Postgres on 5433
     ports:
-      - "5433:5432"
+      - "5434:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks:
+      - sena_stack_net
 
   flyway:
     image: flyway/flyway
@@ -20,6 +23,32 @@ services:
     command: -url=jdbc:postgresql://db:5432/SENA -user=AdminSENA -password=Sena123 migrate
     volumes:
       - ./migrations:/flyway/sql
+    networks:
+      - sena_stack_net
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sena-backend:latest
+    container_name: sena-backend
+    ports:
+      # map to host 3002 to avoid conflict with existing 3000/3001
+      - "3002:3000"
+    env_file:
+      - ./.env.docker
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - NODE_ENV=production
+    depends_on:
+      - db
+    networks:
+      - sena_stack_net
 
 volumes:
   pgdata:
+
+networks:
+  sena_stack_net:
+    external: true
