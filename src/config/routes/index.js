@@ -13,6 +13,7 @@ import cotizacionesRouter from './cotizaciones.js';
 import inscripcionesRouter from './inscripciones.js';
 import cursosRouter from './cursos.js';
 import blogsRouter from './blogs.js';
+import paginasRouter from './paginas.js';
 
 const router = Router();
 
@@ -48,5 +49,7 @@ router.use('/inscripciones', inscripcionesRouter);
 router.use('/cursos', cursosRouter);
 // Blog / Investigaciones
 router.use('/blogs', blogsRouter);
+// Páginas (configuración por pestaña: home, etc.)
+router.use('/paginas', paginasRouter);
 
 export default router;
