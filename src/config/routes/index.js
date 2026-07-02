@@ -14,6 +14,10 @@ import inscripcionesRouter from './inscripciones.js';
 import cursosRouter from './cursos.js';
 import blogsRouter from './blogs.js';
 import paginasRouter from './paginas.js';
+import ensayosRouter from './ensayos.js';
+import requestsRouter from './requests.js';
+import contactRouter from './contact.js';
+import supportRouter from './support.js';
 
 const router = Router();
 
@@ -51,5 +55,13 @@ router.use('/cursos', cursosRouter);
 router.use('/blogs', blogsRouter);
 // Páginas (configuración por pestaña: home, etc.)
 router.use('/paginas', paginasRouter);
+// Ensayos
+router.use('/ensayos', ensayosRouter);
+// Solicitudes de documentos (envío por correo)
+router.use('/requests', requestsRouter);
+// Contact form submissions
+router.use('/contact', contactRouter);
+// Support contact submissions
+router.use('/support', supportRouter);
 
 export default router;
