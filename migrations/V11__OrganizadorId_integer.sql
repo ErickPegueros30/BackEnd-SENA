@@ -16,9 +16,6 @@ ALTER TABLE cursos DROP COLUMN IF EXISTS organizador_id CASCADE;
 -- Rename temporary column to organizador_id
 ALTER TABLE cursos RENAME COLUMN organizador_id_int TO organizador_id;
 
--- Add FK constraint to usuarios(id_usuario)
-ALTER TABLE cursos ADD CONSTRAINT fk_cursos_organizador FOREIGN KEY (organizador_id) REFERENCES usuarios(id_usuario);
-
 -- Add index for faster lookups
 CREATE INDEX IF NOT EXISTS idx_cursos_organizador_id ON cursos(organizador_id);
 

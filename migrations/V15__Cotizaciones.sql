@@ -19,7 +19,6 @@ CREATE TABLE IF NOT EXISTS cotizaciones (
 );
 
 CREATE INDEX IF NOT EXISTS idx_cotizaciones_usuario ON cotizaciones(usuario_id);
-CREATE INDEX IF NOT EXISTS idx_cotizaciones_precio ON cotizaciones(precio_tipo, precio_id);
 
 -- Items asociados a una cotización: referencia a área o rama (una de las dos)
 CREATE TABLE IF NOT EXISTS cotizacion_items (

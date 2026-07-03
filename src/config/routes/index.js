@@ -13,6 +13,13 @@ import cotizacionesRouter from './cotizaciones.js';
 import inscripcionesRouter from './inscripciones.js';
 import cursosRouter from './cursos.js';
 import blogsRouter from './blogs.js';
+import paginasRouter from './paginas.js';
+import ensayosRouter from './ensayos.js';
+import requestsRouter from './requests.js';
+import contactRouter from './contact.js';
+import supportRouter from './support.js';
+import ensayoBilateralRouter from './ensayobilateral.js';
+import ensayoRouter from './ensayo.js';
 
 const router = Router();
 
@@ -48,5 +55,19 @@ router.use('/inscripciones', inscripcionesRouter);
 router.use('/cursos', cursosRouter);
 // Blog / Investigaciones
 router.use('/blogs', blogsRouter);
+// Páginas (configuración por pestaña: home, etc.)
+router.use('/paginas', paginasRouter);
+// Ensayos
+router.use('/ensayos', ensayosRouter);
+// Solicitudes de documentos (envío por correo)
+router.use('/requests', requestsRouter);
+// Contact form submissions
+router.use('/contact', contactRouter);
+// Support contact submissions
+router.use('/support', supportRouter);
+// Cotizaciones de ensayo bilateral
+router.use('/ensayobilateral', ensayoBilateralRouter);
+// Envío de correo para cotización de ensayo individual
+router.use('/ensayo', ensayoRouter);
 
 export default router;
