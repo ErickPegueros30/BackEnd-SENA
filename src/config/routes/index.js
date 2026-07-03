@@ -18,6 +18,8 @@ import ensayosRouter from './ensayos.js';
 import requestsRouter from './requests.js';
 import contactRouter from './contact.js';
 import supportRouter from './support.js';
+import ensayoBilateralRouter from './ensayobilateral.js';
+import ensayoRouter from './ensayo.js';
 
 const router = Router();
 
@@ -63,5 +65,9 @@ router.use('/requests', requestsRouter);
 router.use('/contact', contactRouter);
 // Support contact submissions
 router.use('/support', supportRouter);
+// Cotizaciones de ensayo bilateral
+router.use('/ensayobilateral', ensayoBilateralRouter);
+// Envío de correo para cotización de ensayo individual
+router.use('/ensayo', ensayoRouter);
 
 export default router;
