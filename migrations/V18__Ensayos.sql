@@ -1,3 +1,4 @@
+-- Active: 1783187924679@@127.0.0.1@5433@SENA
 -- Tabla de ensayos de aptitud
 CREATE TABLE IF NOT EXISTS ensayos (
     id_ensayo SERIAL PRIMARY KEY,
@@ -5,7 +6,7 @@ CREATE TABLE IF NOT EXISTS ensayos (
     descripcion TEXT NOT NULL,
     ciclo VARCHAR(20) NOT NULL, 
     anio INTEGER NOT NULL,                
-    id_subarea INTEGER NOT NULL,
+    id_subarea INTEGER,
     area_id INTEGER,
     rama_id INTEGER,
     subrama_id INTEGER,
@@ -61,3 +62,5 @@ BEGIN
         END IF;
     END IF;
 END$$;
+
+ALTER TABLE ensayos ALTER COLUMN id_subarea DROP NOT NULL;
