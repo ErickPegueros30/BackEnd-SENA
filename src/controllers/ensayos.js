@@ -77,6 +77,20 @@ export const getEnsayo = async (req, res) => {
 export const createEnsayo = async (req, res) => {
   try {
     const body = req.body || {}
+    // Si el cliente envía una rama/subrama pero no subarea, comprobamos
+    // si la columna `id_subarea` admite NULL en la BD. Si no, devolvemos
+    // un 400 con instrucciones para aplicar ALTER TABLE.
+    if ((!body.subareaId && !body.id_subarea) && (body.ramaId || body.subramaId)) {
+      try {
+        const chk = await pool.query("SELECT attnotnull FROM pg_attribute WHERE attrelid = 'ensayos'::regclass AND attname = 'id_subarea'")
+        if (chk && chk.rows && chk.rows[0] && chk.rows[0].attnotnull) {
+          return res.status(400).json({ ok: false, message: 'La columna id_subarea en la base de datos NO permite NULL. Para crear ensayos por rama/subrama sin subárea ejecute: ALTER TABLE ensayos ALTER COLUMN id_subarea DROP NOT NULL;' })
+        }
+      } catch (e) {
+        // si falla la comprobación, seguimos y dejamos que el INSERT falle con su error original
+        console.error('createEnsayo: schema check failed', e)
+      }
+    }
     const q = `INSERT INTO ensayos (codigo, descripcion, ciclo, anio, id_subarea, area_id, rama_id, subrama_id, inscripcion_inicio, inscripcion_fin, fecha_inicio_ensayo, fecha_detalle, disponible)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,COALESCE($13, true)) RETURNING *`
     const params = [
