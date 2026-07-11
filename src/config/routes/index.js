@@ -15,6 +15,7 @@ import cursosRouter from './cursos.js';
 import blogsRouter from './blogs.js';
 import paginasRouter from './paginas.js';
 import ensayosRouter from './ensayos.js';
+import interlaboratorioRouter from './interlaboratorio.js';
 import requestsRouter from './requests.js';
 import contactRouter from './contact.js';
 import supportRouter from './support.js';
@@ -59,6 +60,8 @@ router.use('/blogs', blogsRouter);
 router.use('/paginas', paginasRouter);
 // Ensayos
 router.use('/ensayos', ensayosRouter);
+// Interlaboratorio
+router.use('/interlaboratorio', interlaboratorioRouter);
 // Solicitudes de documentos (envío por correo)
 router.use('/requests', requestsRouter);
 // Contact form submissions
