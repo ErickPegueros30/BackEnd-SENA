@@ -21,6 +21,8 @@ import contactRouter from './contact.js';
 import supportRouter from './support.js';
 import ensayoBilateralRouter from './ensayobilateral.js';
 import ensayoRouter from './ensayo.js';
+import comparacionesBilateralRouter from './comparacionesBilateral.js';
+import comparacionesRouter from './comparaciones.js';
 
 const router = Router();
 
@@ -72,5 +74,10 @@ router.use('/support', supportRouter);
 router.use('/ensayobilateral', ensayoBilateralRouter);
 // Envío de correo para cotización de ensayo individual
 router.use('/ensayo', ensayoRouter);
+// Envío de solicitud de comparación bilateral
+router.use('/comparaciones-bilateral', comparacionesBilateralRouter);
+
+// Envío de cotización para comparaciones (normales)
+router.use('/comparaciones', comparacionesRouter);
 
 export default router;
