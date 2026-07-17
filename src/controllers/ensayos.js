@@ -87,6 +87,8 @@ export const listEnsayos = async (req, res) => {
     if (area) { params.push(area); where += ` AND area_id = $${params.length}` }
     if (rama) { params.push(rama); where += ` AND rama_id = $${params.length}` }
     if (subarea) { params.push(subarea); where += ` AND id_subarea = $${params.length}` }
+    // Si se listan por área, ocultar ensayos de tipo 'principal' (no se visualizan en áreas)
+    if (area) { where += ` AND (tipo IS NULL OR tipo <> 'principal')` }
     if (typeof disponible !== 'undefined') { params.push(disponible === 'true' ? true : (disponible === 'false' ? false : null)); where += ` AND disponible = $${params.length}` }
     if (anio) { params.push(Number(anio)); where += ` AND anio = $${params.length}` }
     const q = `SELECT * FROM ensayos ${where} ORDER BY fecha_inicio_ensayo DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`
@@ -141,15 +143,7 @@ export const createEnsayo = async (req, res) => {
       return res.status(500).json({ ok: false, message: "Columna 'tipo' no encontrada en la base de datos. Ejecuta la migración V21__Add_tipo_to_ensayos.sql" })
     }
 
-    // Si se envió tipo, asegurarnos de que pertenece a rama/subrama Agua o Alimentos
-    if (body.tipo) {
-      let ramaName = null
-      if (body.ramaId) ramaName = await getRamaNameById(body.ramaId)
-      else if (body.subramaId) ramaName = await getRamaNameFromSubrama(body.subramaId)
-      if (!ramaName || !/agua|aliment/i.test(ramaName)) {
-        return res.status(400).json({ ok: false, message: "El campo 'tipo' solo está permitido para ramas/subramas de Agua o Alimentos" })
-      }
-    }
+    // No restringimos 'tipo' a ramas específicas: se permite 'principal'/'secundario' para cualquier rama.
 
     // Construir INSERT dinámico según existencia de columna 'tipo'
     const baseCols = ['codigo','descripcion','ciclo','anio','id_subarea','area_id','rama_id','subrama_id','inscripcion_inicio','inscripcion_fin','fecha_inicio_ensayo','fecha_detalle']
@@ -207,14 +201,7 @@ export const updateEnsayo = async (req, res) => {
       return res.status(500).json({ ok: false, message: "Columna 'tipo' no encontrada en la base de datos. Ejecuta la migración V21__Add_tipo_to_ensayos.sql" })
     }
 
-    if (b.tipo) {
-      let ramaName = null
-      if (b.ramaId) ramaName = await getRamaNameById(b.ramaId)
-      else if (b.subramaId) ramaName = await getRamaNameFromSubrama(b.subramaId)
-      if (!ramaName || !/agua|aliment/i.test(ramaName)) {
-        return res.status(400).json({ ok: false, message: "El campo 'tipo' solo está permitido para ramas/subramas de Agua o Alimentos" })
-      }
-    }
+    // No restringimos 'tipo' en update: se permite 'principal'/'secundario' para cualquier rama.
 
     // Construir UPDATE dinámico
     const setClauses = []
