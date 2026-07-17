@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer'
+import { sendMail } from '../config/mailer.js'
 
 const sendSupport = async (req, res) => {
   try {
@@ -8,22 +8,7 @@ const sendSupport = async (req, res) => {
       return res.status(400).json({ ok: false, message: 'Faltan datos obligatorios para soporte' })
     }
 
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587,
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: process.env.SMTP_USER && process.env.SMTP_PASS ? {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      } : undefined,
-    })
-
-    try {
-      await transporter.verify()
-    } catch (verifyErr) {
-      console.error('SMTP verify failed (support):', verifyErr)
-      return res.status(502).json({ ok: false, message: 'No se pudo conectar al servidor SMTP', error: verifyErr.message })
-    }
+    // Usar transporter compartido con pooling (src/config/mailer.js)
 
     const text = `Nombre completo: ${nombre}\nCorreo electrónico: ${email}\nTeléfono: ${telefono || ''}\n\nMotivo:\n${motivo}`
 
@@ -88,14 +73,9 @@ const sendSupport = async (req, res) => {
       },
     }
 
-    try {
-      const info = await transporter.sendMail(mailOptions)
-      console.log('Soporte enviado, sendMail info:', info)
-      return res.json({ ok: true, message: 'Solicitud de soporte enviada', info })
-    } catch (sendErr) {
-      console.error('Error enviando soporte (sendMail):', sendErr)
-      return res.status(502).json({ ok: false, message: 'Error enviando correo de soporte', error: sendErr.message })
-    }
+    sendMail(mailOptions)
+    console.log('Solicitud de soporte encolada para envío')
+    return res.status(201).json({ ok: true, message: 'Solicitud recibida y en proceso de envío' })
   } catch (err) {
     console.error('Error en sendSupport:', err)
     return res.status(500).json({ ok: false, message: 'Error interno enviando soporte' })

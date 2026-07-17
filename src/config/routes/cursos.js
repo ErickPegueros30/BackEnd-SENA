@@ -8,6 +8,9 @@ const router = Router()
 router.get('/', cursosCtrl.listCursos)
 router.get('/:id', cursosCtrl.getCurso)
 
+// Solicitar cotización de curso (formulario público)
+router.post('/solicitar-cotizacion', cursosCtrl.sendCourseQuotation)
+
 // Protected actions
 router.post('/', verifyToken, cursosCtrl.createCurso)
 router.put('/:id', verifyToken, cursosCtrl.updateCurso)

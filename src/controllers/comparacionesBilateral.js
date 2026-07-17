@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer'
+import { sendMail } from '../config/mailer.js'
 
 export const sendComparacion = async (req, res) => {
   try {
@@ -8,20 +8,7 @@ export const sendComparacion = async (req, res) => {
       return res.status(400).json({ ok: false, message: 'Faltan datos obligatorios: nombre, email o laboratorio' })
     }
 
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587,
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: process.env.SMTP_USER && process.env.SMTP_PASS ? {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      } : undefined,
-    })
-
-    try { await transporter.verify() } catch (verifyErr) {
-      console.error('SMTP verify failed (comparacionesBilateral):', verifyErr)
-      return res.status(502).json({ ok: false, message: 'No se pudo conectar al servidor SMTP', error: verifyErr.message })
-    }
+    // Usar transporter compartido para mejorar rendimiento
 
     // Si el frontend envía detalles de los programas, úsalos; si no, muestra los ids
     let programasText = ''
@@ -110,14 +97,9 @@ export const sendComparacion = async (req, res) => {
       },
     }
 
-    try {
-      const info = await transporter.sendMail(mailOptions)
-      console.log('Comparación bilateral enviada, info:', info)
-      return res.status(201).json({ ok: true, message: 'Solicitud enviada', info })
-    } catch (sendErr) {
-      console.error('Error enviando comparacion bilateral:', sendErr)
-      return res.status(502).json({ ok: false, message: 'Error enviando correo', error: sendErr.message })
-    }
+    sendMail(mailOptions)
+    console.log('Comparación bilateral encolada para envío')
+    return res.status(201).json({ ok: true, message: 'Solicitud recibida y en proceso de envío' })
   } catch (err) {
     console.error('sendComparacion error', err)
     return res.status(500).json({ ok: false, message: 'Error interno' })

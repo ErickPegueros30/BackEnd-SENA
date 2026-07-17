@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer'
+import { sendMail } from '../config/mailer.js'
 
 const sendRequest = async (req, res) => {
   try {
@@ -8,24 +8,7 @@ const sendRequest = async (req, res) => {
       return res.status(400).json({ ok: false, message: 'Faltan datos obligatorios' })
     }
 
-    // Crear transporter con variables de entorno
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587,
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: process.env.SMTP_USER && process.env.SMTP_PASS ? {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      } : undefined,
-    })
-
-    // Verificar conexión al servidor SMTP antes de intentar enviar
-    try {
-      await transporter.verify()
-    } catch (verifyErr) {
-      console.error('SMTP verify failed:', verifyErr)
-      return res.status(502).json({ ok: false, message: 'No se pudo conectar al servidor SMTP', error: verifyErr.message })
-    }
+    // Usar transporter compartido con pooling (src/config/mailer.js)
 
     const titles = selected.map(s => s.title || s)
     const selectedHtml = titles.map((t, i) => `<li>${t}</li>`).join('')
@@ -100,14 +83,9 @@ const sendRequest = async (req, res) => {
       },
     }
 
-    try {
-      const info = await transporter.sendMail(mailOptions)
-      console.log('Correo enviado, sendMail info:', info)
-      return res.json({ ok: true, message: 'Correo enviado'})
-    } catch (sendErr) {
-      console.error('Error enviando correo (sendMail):', sendErr)
-      return res.status(502).json({ ok: false, message: 'Error enviando correo', error: sendErr.message})
-    }
+    sendMail(mailOptions)
+    console.log('Solicitud de documentos encolada para envío')
+    return res.status(201).json({ ok: true, message: 'Solicitud recibida y en proceso de envío' })
   } catch (err) {
     console.error('Error enviando correo:', err)
     return res.status(500).json({ ok: false, message: 'Error interno enviando correo' })

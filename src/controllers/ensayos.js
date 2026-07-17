@@ -5,6 +5,43 @@ const safeDate = (d) => {
   try { const dt = d instanceof Date ? d : new Date(d); if (isNaN(dt.getTime())) return null; return dt } catch (e) { return null }
 }
 
+const columnExists = async (table, column) => {
+  try {
+    const q = `SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2 LIMIT 1`
+    const r = await pool.query(q, [String(table), String(column)])
+    return r.rowCount > 0
+  } catch (e) {
+    console.error('columnExists error', e)
+    return false
+  }
+}
+
+const getRamaNameById = async (ramaId) => {
+  try {
+    if (!ramaId) return null
+    const r = await pool.query('SELECT * FROM ramas WHERE id = $1 LIMIT 1', [ramaId])
+    if (r.rowCount === 0) return null
+    const row = r.rows[0]
+    return (row.nombre || row.name || null)
+  } catch (e) {
+    console.error('getRamaNameById error', e)
+    return null
+  }
+}
+
+const getRamaNameFromSubrama = async (subramaId) => {
+  try {
+    if (!subramaId) return null
+    const r = await pool.query('SELECT rama_id FROM subramas WHERE id = $1 LIMIT 1', [subramaId])
+    if (r.rowCount === 0) return null
+    const ramaId = r.rows[0].rama_id
+    return await getRamaNameById(ramaId)
+  } catch (e) {
+    console.error('getRamaNameFromSubrama error', e)
+    return null
+  }
+}
+
 const toClient = (r) => ({
   id: r.id_ensayo,
   codigo: r.codigo,
@@ -15,6 +52,7 @@ const toClient = (r) => ({
   ramaId: r.rama_id || null,
   subareaId: r.id_subarea || null,
   subramaId: r.subrama_id || null,
+  tipo: r.tipo || 'principal',
   inscripcionInicio: (() => { const d = safeDate(r.inscripcion_inicio); return d ? d.toISOString().split('T')[0] : null })(),
   inscripcionFin: (() => { const d = safeDate(r.inscripcion_fin); return d ? d.toISOString().split('T')[0] : null })(),
   fechaInicioEnsayo: (() => { const d = safeDate(r.fecha_inicio_ensayo); return d ? d.toISOString().split('T')[0] : null })(),
@@ -91,23 +129,61 @@ export const createEnsayo = async (req, res) => {
         console.error('createEnsayo: schema check failed', e)
       }
     }
-    const q = `INSERT INTO ensayos (codigo, descripcion, ciclo, anio, id_subarea, area_id, rama_id, subrama_id, inscripcion_inicio, inscripcion_fin, fecha_inicio_ensayo, fecha_detalle, disponible)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,COALESCE($13, true)) RETURNING *`
-    const params = [
-      body.codigo,
-      body.descripcion,
-      parseIntIfNumeric(body.ciclo) || null,
-      parseIntIfNumeric(body.anio) || null,
-      parseIntIfNumeric(body.subareaId || body.id_subarea) || null,
-      parseIntIfNumeric(body.areaId) || null,
-      parseIntIfNumeric(body.ramaId) || null,
-      parseIntIfNumeric(body.subramaId) || null,
-      normalizeDate(body.inscripcionInicio),
-      normalizeDate(body.inscripcionFin),
-      normalizeDate(body.fechaInicioEnsayo),
-      body.fechaDetalle || null,
-      typeof body.disponible === 'undefined' ? null : !!body.disponible
-    ]
+    // Validar 'tipo' si se envía y si corresponde a ramas Agua/Alimentos
+    const allowedTipos = ['principal','secundario']
+    if (body.tipo && !allowedTipos.includes(String(body.tipo).toLowerCase())) {
+      return res.status(400).json({ ok: false, message: "Campo 'tipo' inválido. Valores permitidos: 'principal', 'secundario'" })
+    }
+
+    const hasTipoCol = await columnExists('ensayos', 'tipo')
+    // Si cliente envía 'tipo' pero la columna no existe, devolver instrucción clara
+    if (body.tipo && !hasTipoCol) {
+      return res.status(500).json({ ok: false, message: "Columna 'tipo' no encontrada en la base de datos. Ejecuta la migración V21__Add_tipo_to_ensayos.sql" })
+    }
+
+    // Si se envió tipo, asegurarnos de que pertenece a rama/subrama Agua o Alimentos
+    if (body.tipo) {
+      let ramaName = null
+      if (body.ramaId) ramaName = await getRamaNameById(body.ramaId)
+      else if (body.subramaId) ramaName = await getRamaNameFromSubrama(body.subramaId)
+      if (!ramaName || !/agua|aliment/i.test(ramaName)) {
+        return res.status(400).json({ ok: false, message: "El campo 'tipo' solo está permitido para ramas/subramas de Agua o Alimentos" })
+      }
+    }
+
+    // Construir INSERT dinámico según existencia de columna 'tipo'
+    const baseCols = ['codigo','descripcion','ciclo','anio','id_subarea','area_id','rama_id','subrama_id','inscripcion_inicio','inscripcion_fin','fecha_inicio_ensayo','fecha_detalle']
+    const values = []
+    const params = []
+    let idx = 1
+    for (const c of baseCols) {
+      params.push(
+        c === 'codigo' ? body.codigo :
+        c === 'descripcion' ? body.descripcion :
+        c === 'ciclo' ? parseIntIfNumeric(body.ciclo) || null :
+        c === 'anio' ? parseIntIfNumeric(body.anio) || null :
+        c === 'id_subarea' ? parseIntIfNumeric(body.subareaId || body.id_subarea) || null :
+        c === 'area_id' ? parseIntIfNumeric(body.areaId) || null :
+        c === 'rama_id' ? parseIntIfNumeric(body.ramaId) || null :
+        c === 'subrama_id' ? parseIntIfNumeric(body.subramaId) || null :
+        c === 'inscripcion_inicio' ? normalizeDate(body.inscripcionInicio) :
+        c === 'inscripcion_fin' ? normalizeDate(body.inscripcionFin) :
+        c === 'fecha_inicio_ensayo' ? normalizeDate(body.fechaInicioEnsayo) :
+        body.fechaDetalle || null
+      )
+      values.push(`$${idx}`)
+      idx++
+    }
+    if (hasTipoCol) {
+      values.push(`COALESCE($${idx}, 'principal')`)
+      params.push(body.tipo || 'principal')
+      idx++
+    }
+    // disponible
+    values.push(`COALESCE($${idx}, true)`)
+    params.push(typeof body.disponible === 'undefined' ? null : !!body.disponible)
+
+    const q = `INSERT INTO ensayos (${baseCols.join(',')}${hasTipoCol ? ', tipo' : ''}, disponible) VALUES (${values.join(',')}) RETURNING *`
     const r = await pool.query(q, params)
     return res.status(201).json(toClient(r.rows[0]))
   } catch (err) {
@@ -120,24 +196,48 @@ export const updateEnsayo = async (req, res) => {
   try {
     const { id } = req.params
     const b = req.body || {}
-    const q = `UPDATE ensayos SET codigo = COALESCE($1, codigo), descripcion = COALESCE($2, descripcion), ciclo = COALESCE($3, ciclo), anio = COALESCE($4, anio), id_subarea = COALESCE($5, id_subarea), area_id = COALESCE($6, area_id), rama_id = COALESCE($7, rama_id), subrama_id = COALESCE($8, subrama_id), inscripcion_inicio = COALESCE($9, inscripcion_inicio), inscripcion_fin = COALESCE($10, inscripcion_fin), fecha_inicio_ensayo = COALESCE($11, fecha_inicio_ensayo), fecha_detalle = COALESCE($12, fecha_detalle), disponible = COALESCE($13, disponible) WHERE id_ensayo = $14 RETURNING *`
-    const params = [
-      b.codigo || null,
-      b.descripcion || null,
-      parseIntIfNumeric(b.ciclo) || null,
-      parseIntIfNumeric(b.anio) || null,
-      parseIntIfNumeric(b.subareaId || b.id_subarea) || null,
-      parseIntIfNumeric(b.areaId) || null,
-      parseIntIfNumeric(b.ramaId) || null,
-      parseIntIfNumeric(b.subramaId) || null,
-      normalizeDate(b.inscripcionInicio),
-      normalizeDate(b.inscripcionFin),
-      normalizeDate(b.fechaInicioEnsayo),
-      b.fechaDetalle || null,
-      typeof b.disponible === 'undefined' ? null : !!b.disponible,
-      
-      id
-    ]
+    // Validar 'tipo' si se envía
+    const allowedTipos = ['principal','secundario']
+    if (b.tipo && !allowedTipos.includes(String(b.tipo).toLowerCase())) {
+      return res.status(400).json({ ok: false, message: "Campo 'tipo' inválido. Valores permitidos: 'principal', 'secundario'" })
+    }
+
+    const hasTipoCol = await columnExists('ensayos', 'tipo')
+    if (b.tipo && !hasTipoCol) {
+      return res.status(500).json({ ok: false, message: "Columna 'tipo' no encontrada en la base de datos. Ejecuta la migración V21__Add_tipo_to_ensayos.sql" })
+    }
+
+    if (b.tipo) {
+      let ramaName = null
+      if (b.ramaId) ramaName = await getRamaNameById(b.ramaId)
+      else if (b.subramaId) ramaName = await getRamaNameFromSubrama(b.subramaId)
+      if (!ramaName || !/agua|aliment/i.test(ramaName)) {
+        return res.status(400).json({ ok: false, message: "El campo 'tipo' solo está permitido para ramas/subramas de Agua o Alimentos" })
+      }
+    }
+
+    // Construir UPDATE dinámico
+    const setClauses = []
+    const params = []
+    let idx = 1
+    const add = (col, val) => { setClauses.push(`${col} = COALESCE($${idx}, ${col})`); params.push(val); idx++ }
+    add('codigo', b.codigo || null)
+    add('descripcion', b.descripcion || null)
+    add('ciclo', parseIntIfNumeric(b.ciclo) || null)
+    add('anio', parseIntIfNumeric(b.anio) || null)
+    add('id_subarea', parseIntIfNumeric(b.subareaId || b.id_subarea) || null)
+    add('area_id', parseIntIfNumeric(b.areaId) || null)
+    add('rama_id', parseIntIfNumeric(b.ramaId) || null)
+    add('subrama_id', parseIntIfNumeric(b.subramaId) || null)
+    add('inscripcion_inicio', normalizeDate(b.inscripcionInicio))
+    add('inscripcion_fin', normalizeDate(b.inscripcionFin))
+    add('fecha_inicio_ensayo', normalizeDate(b.fechaInicioEnsayo))
+    add('fecha_detalle', b.fechaDetalle || null)
+    if (hasTipoCol) add('tipo', b.tipo || null)
+    add('disponible', typeof b.disponible === 'undefined' ? null : !!b.disponible)
+
+    const q = `UPDATE ensayos SET ${setClauses.join(', ')} WHERE id_ensayo = $${idx} RETURNING *`
+    params.push(id)
     const r = await pool.query(q, params)
     if (r.rowCount === 0) return res.status(404).json({ ok: false, message: 'Ensayo no encontrado' })
     return res.json(toClient(r.rows[0]))
