@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer'
+import { sendMail } from '../config/mailer.js'
 
 export const sendCotizacionComparacion = async (req, res) => {
   try {
@@ -13,20 +13,7 @@ export const sendCotizacionComparacion = async (req, res) => {
       return res.status(400).json({ ok: false, message: 'El programa debe incluir referencia y descripcion' })
     }
 
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587,
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: process.env.SMTP_USER && process.env.SMTP_PASS ? {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      } : undefined,
-    })
-
-    try { await transporter.verify() } catch (verifyErr) {
-      console.error('SMTP verify failed (comparaciones):', verifyErr)
-      return res.status(502).json({ ok: false, message: 'No se pudo conectar al servidor SMTP', error: verifyErr.message })
-    }
+    // Usar transporter reutilizable con pooling (configurado en src/config/mailer.js)
 
     const text = `Cotización Comparacion\n\nNombre: ${nombre}\nLaboratorio: ${laboratorio}\nCorreo: ${email}\nTeléfono: ${telefono || ''}\nPrograma referencia: ${referencia}\nPrograma descripción: ${descripcion}`
 
@@ -105,14 +92,10 @@ export const sendCotizacionComparacion = async (req, res) => {
       },
     }
 
-    try {
-      const info = await transporter.sendMail(mailOptions)
-      console.log('Cotización comparacion enviada, info:', info)
-      return res.status(201).json({ ok: true, message: 'Solicitud enviada', info })
-    } catch (sendErr) {
-      console.error('Error enviando cotizacion comparacion:', sendErr)
-      return res.status(502).json({ ok: false, message: 'Error enviando correo', error: sendErr.message })
-    }
+    // Enviar en background para responder rápido
+    sendMail(mailOptions)
+    console.log('Cotización comparacion encolada para envío')
+    return res.status(201).json({ ok: true, message: 'Solicitud recibida y en proceso de envío' })
   } catch (err) {
     console.error('sendCotizacionComparacion error', err)
     return res.status(500).json({ ok: false, message: 'Error interno' })

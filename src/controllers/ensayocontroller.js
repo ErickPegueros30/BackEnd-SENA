@@ -1,31 +1,16 @@
-import nodemailer from 'nodemailer'
+import { sendMail } from '../config/mailer.js'
 
 const sendEnsayoEmail = async (req, res) => {
   try {
-    const { nombre, email, telefono, codigo, fechaInicio } = req.body
+    const { nombre, email, telefono, codigo, fechaInicio, laboratorio, tipoSeleccionado, precioUnitario, descripcionSeleccionada } = req.body
 
     if (!nombre || !email || !codigo) {
       return res.status(400).json({ ok: false, message: 'Faltan campos obligatorios: nombre, email o codigo' })
     }
 
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587,
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: process.env.SMTP_USER && process.env.SMTP_PASS ? {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      } : undefined,
-    })
+    // Usar transporter compartido con pooling (src/config/mailer.js)
 
-    try {
-      await transporter.verify()
-    } catch (verifyErr) {
-      console.error('SMTP verify failed (ensayo):', verifyErr)
-      return res.status(502).json({ ok: false, message: 'No se pudo conectar al servidor SMTP', error: verifyErr.message })
-    }
-
-    const text = `Nombre: ${nombre}\nCorreo: ${email}\nTeléfono: ${telefono || ''}\n\nCódigo del ensayo: ${codigo}\nFecha de inicio: ${fechaInicio || ''}`
+    const text = `Nombre: ${nombre}\nCorreo: ${email}\nTeléfono: ${telefono || ''}\nLaboratorio: ${laboratorio || ''}\nDescripción: ${descripcionSeleccionada || ''}\n\nCódigo del ensayo: ${codigo}\nFecha de inicio: ${fechaInicio || ''}`
 
     const html = `
   <table align="center" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;margin:20px auto;background:#ffffff;border-radius:20px;box-shadow:0 8px 32px rgba(0,0,0,0.08);overflow:hidden;font-family:'DM Sans','Segoe UI',Arial,sans-serif;color:#1c2b14;">
@@ -59,12 +44,22 @@ const sendEnsayoEmail = async (req, res) => {
           <span style="color:#1c2b14;word-break:break-word;">${telefono || 'No especificado'}</span>
         </div>
 
-        <div style="margin:16px 0;border-top:1px solid #edf4e3;border-bottom:1px solid #edf4e3;padding:14px 0;background:#fafcf9;border-radius:6px;">
+          <div style="margin:16px 0;border-top:1px solid #edf4e3;border-bottom:1px solid #edf4e3;padding:14px 0;background:#fafcf9;border-radius:6px;">
           <div style="margin-bottom:10px;font-size:15px;line-height:1.5;display:flex;align-items:flex-start;padding:0 10px;">
             <span style="width:24px;font-size:18px;color:#5d8a2f;margin-right:10px;text-align:center;flex-shrink:0;"></span>
             <span style="font-weight:600;color:#5a6a52;min-width:120px;">Código del ensayo:</span>
             <span style="color:#1c2b14;word-break:break-word;font-weight:500;">${codigo}</span>
           </div>
+            <div style="margin-bottom:10px;font-size:15px;line-height:1.5;display:flex;align-items:flex-start;padding:0 10px;">
+              <span style="width:24px;font-size:18px;color:#5d8a2f;margin-right:10px;text-align:center;flex-shrink:0;"></span>
+              <span style="font-weight:600;color:#5a6a52;min-width:120px;">Laboratorio:</span>
+              <span style="color:#1c2b14;word-break:break-word;font-weight:500;">${laboratorio || 'No especificado'}</span>
+            </div>
+            <div style="margin-bottom:10px;font-size:15px;line-height:1.5;display:flex;align-items:flex-start;padding:0 10px;">
+              <span style="width:24px;font-size:18px;color:#5d8a2f;margin-right:10px;text-align:center;flex-shrink:0;"></span>
+              <span style="font-weight:600;color:#5a6a52;min-width:120px;">Descripción:</span>
+              <span style="color:#1c2b14;word-break:break-word;font-weight:500;">${descripcionSeleccionada || 'No especificada'}</span>
+            </div>
           <div style="font-size:15px;line-height:1.5;display:flex;align-items:flex-start;padding:0 10px;">
             <span style="width:24px;font-size:18px;color:#5d8a2f;margin-right:10px;text-align:center;flex-shrink:0;"></span>
             <span style="font-weight:600;color:#5a6a52;min-width:120px;">Fecha de inicio:</span>
@@ -93,14 +88,9 @@ const sendEnsayoEmail = async (req, res) => {
       envelope: { from: process.env.SMTP_USER, to: [to] }
     }
 
-    try {
-      const info = await transporter.sendMail(mailOptions)
-      console.log('Ensayo email sent:', info)
-      return res.json({ ok: true, message: 'Correo de cotización enviado', info })
-    } catch (sendErr) {
-      console.error('Error sending ensayo email:', sendErr)
-      return res.status(502).json({ ok: false, message: 'Error enviando correo', error: sendErr.message })
-    }
+    sendMail(mailOptions)
+    console.log('Ensayo encolado para envío')
+    return res.status(201).json({ ok: true, message: 'Solicitud recibida y en proceso de envío' })
   } catch (err) {
     console.error('sendEnsayoEmail error:', err)
     return res.status(500).json({ ok: false, message: 'Error interno enviando correo' })

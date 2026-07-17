@@ -1,32 +1,17 @@
-import nodemailer from 'nodemailer'
+import { sendMail } from '../config/mailer.js'
 
 const sendEnsayoBilateral = async (req, res) => {
   try {
-    const { nombre, email, telefono, area, ensayos } = req.body
+    const { nombre, email, telefono, area, ensayos, laboratorio } = req.body
 
     if (!nombre || !email || !area || !ensayos || !Array.isArray(ensayos) || ensayos.length === 0) {
       return res.status(400).json({ ok: false, message: 'Faltan datos obligatorios para cotización de ensayo bilateral' })
     }
 
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587,
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: process.env.SMTP_USER && process.env.SMTP_PASS ? {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      } : undefined,
-    })
-
-    try {
-      await transporter.verify()
-    } catch (verifyErr) {
-      console.error('SMTP verify failed (ensayo bilateral):', verifyErr)
-      return res.status(502).json({ ok: false, message: 'No se pudo conectar al servidor SMTP', error: verifyErr.message })
-    }
+    // Usar transporter compartido con pooling (src/config/mailer.js)
 
     const ensayosText = ensayos.join('\n')
-    const text = `Nombre: ${nombre}\nCorreo: ${email}\nTeléfono: ${telefono || ''}\nÁrea: ${area}\n\nEnsayos:\n${ensayosText}`
+    const text = `Nombre: ${nombre}\nCorreo: ${email}\nTeléfono: ${telefono || ''}\nLaboratorio: ${laboratorio || ''}\nÁrea: ${area}\n\nEnsayos:\n${ensayosText}`
 
     const ensayosHtmlRows = ensayos.map(e => `<li style="margin-bottom:6px;">${String(e)}</li>`).join('')
 
@@ -67,6 +52,11 @@ const sendEnsayoBilateral = async (req, res) => {
           <span style="font-weight:600;color:#5a6a52;min-width:120px;">Área:</span>
           <span style="color:#1c2b14;word-break:break-word;">${area}</span>
         </div>
+        <div style="margin-bottom:14px;font-size:15px;line-height:1.5;display:flex;align-items:flex-start;">
+          <span style="width:24px;font-size:18px;color:#5d8a2f;margin-right:10px;text-align:center;flex-shrink:0;"></span>
+          <span style="font-weight:600;color:#5a6a52;min-width:120px;">Laboratorio:</span>
+          <span style="color:#1c2b14;word-break:break-word;">${laboratorio || 'No especificado'}</span>
+        </div>
 
         <div style="background:#f8faf6;border-left:4px solid #5d8a2f;border-radius:8px;padding:18px 20px;margin-top:20px;font-size:15px;line-height:1.6;color:#1c2b14;">
           <strong style="color:#5d8a2f;">Ensayos solicitados:</strong>
@@ -99,14 +89,9 @@ const sendEnsayoBilateral = async (req, res) => {
       },
     }
 
-    try {
-      const info = await transporter.sendMail(mailOptions)
-      console.log('Ensayo bilateral enviado, sendMail info:', info)
-      return res.json({ ok: true, message: 'Solicitud de cotización enviada', info })
-    } catch (sendErr) {
-      console.error('Error enviando ensayo bilateral (sendMail):', sendErr)
-      return res.status(502).json({ ok: false, message: 'Error enviando correo de cotización', error: sendErr.message })
-    }
+    sendMail(mailOptions)
+    console.log('Ensayo bilateral encolado para envío')
+    return res.status(201).json({ ok: true, message: 'Solicitud recibida y en proceso de envío' })
   } catch (err) {
     console.error('Error en sendEnsayoBilateral:', err)
     return res.status(500).json({ ok: false, message: 'Error interno enviando cotización' })
