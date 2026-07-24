@@ -41,6 +41,8 @@ services:
       - DB_HOST=db
       - DB_PORT=5432
       - NODE_ENV=production
+    volumes:
+      - ${HOST_UPLOADS:-/opt/SENA/uploads}:/app/uploads
     depends_on:
       - db
     networks:
