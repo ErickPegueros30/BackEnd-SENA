@@ -59,6 +59,7 @@ const toClient = (r) => ({
   fechaDetalle: r.fecha_detalle || null,
   disponible: typeof r.disponible === 'boolean' ? r.disponible : (r.disponible === null ? null : !!r.disponible),
   precioReferencia: r.precio_referencia || null,
+  nacionalidad: (r.nacionalidad || 'mexico'),
   createdAt: (() => { const d = safeDate(r.created_at); return d ? d.toISOString() : null })(),
   updatedAt: (() => { const d = safeDate(r.updated_at); return d ? d.toISOString() : null })(),
 })
@@ -137,6 +138,16 @@ export const createEnsayo = async (req, res) => {
       return res.status(400).json({ ok: false, message: "Campo 'tipo' inválido. Valores permitidos: 'principal', 'secundario'" })
     }
 
+    // Validar 'nacionalidad' si se envía
+    const allowedNacionalidades = ['mexico','colombia']
+    const hasNacionalidadCol = await columnExists('ensayos', 'nacionalidad')
+    if (body.nacionalidad && !allowedNacionalidades.includes(String(body.nacionalidad).toLowerCase())) {
+      return res.status(400).json({ ok: false, message: "Campo 'nacionalidad' inválido. Valores permitidos: 'mexico', 'colombia'" })
+    }
+    if (body.nacionalidad && !hasNacionalidadCol) {
+      return res.status(500).json({ ok: false, message: "Columna 'nacionalidad' no encontrada en la base de datos. Ejecuta la migración V18__Ensayos.sql" })
+    }
+
     const hasTipoCol = await columnExists('ensayos', 'tipo')
     // Si cliente envía 'tipo' pero la columna no existe, devolver instrucción clara
     if (body.tipo && !hasTipoCol) {
@@ -173,11 +184,17 @@ export const createEnsayo = async (req, res) => {
       params.push(body.tipo || 'principal')
       idx++
     }
+    if (hasNacionalidadCol) {
+      values.push(`COALESCE($${idx}, 'mexico')`)
+      params.push(body.nacionalidad || 'mexico')
+      idx++
+    }
     // disponible
     values.push(`COALESCE($${idx}, true)`)
     params.push(typeof body.disponible === 'undefined' ? null : !!body.disponible)
 
-    const q = `INSERT INTO ensayos (${baseCols.join(',')}${hasTipoCol ? ', tipo' : ''}, disponible) VALUES (${values.join(',')}) RETURNING *`
+    const colsList = `${baseCols.join(',')}${hasTipoCol ? ', tipo' : ''}${hasNacionalidadCol ? ', nacionalidad' : ''}, disponible`
+    const q = `INSERT INTO ensayos (${colsList}) VALUES (${values.join(',')}) RETURNING *`
     const r = await pool.query(q, params)
     return res.status(201).json(toClient(r.rows[0]))
   } catch (err) {
@@ -201,6 +218,16 @@ export const updateEnsayo = async (req, res) => {
       return res.status(500).json({ ok: false, message: "Columna 'tipo' no encontrada en la base de datos. Ejecuta la migración V21__Add_tipo_to_ensayos.sql" })
     }
 
+    // Validar 'nacionalidad' en update
+    const allowedNacionalidades = ['mexico','colombia']
+    const hasNacionalidadCol = await columnExists('ensayos', 'nacionalidad')
+    if (b.nacionalidad && !allowedNacionalidades.includes(String(b.nacionalidad).toLowerCase())) {
+      return res.status(400).json({ ok: false, message: "Campo 'nacionalidad' inválido. Valores permitidos: 'mexico', 'colombia'" })
+    }
+    if (b.nacionalidad && !hasNacionalidadCol) {
+      return res.status(500).json({ ok: false, message: "Columna 'nacionalidad' no encontrada en la base de datos. Ejecuta la migración V18__Ensayos.sql" })
+    }
+
     // No restringimos 'tipo' en update: se permite 'principal'/'secundario' para cualquier rama.
 
     // Construir UPDATE dinámico
@@ -221,6 +248,7 @@ export const updateEnsayo = async (req, res) => {
     add('fecha_inicio_ensayo', normalizeDate(b.fechaInicioEnsayo))
     add('fecha_detalle', b.fechaDetalle || null)
     if (hasTipoCol) add('tipo', b.tipo || null)
+    if (hasNacionalidadCol) add('nacionalidad', b.nacionalidad || null)
     add('disponible', typeof b.disponible === 'undefined' ? null : !!b.disponible)
 
     const q = `UPDATE ensayos SET ${setClauses.join(', ')} WHERE id_ensayo = $${idx} RETURNING *`

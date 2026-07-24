@@ -1,4 +1,4 @@
--- Active: 1783187924679@@127.0.0.1@5433@SENA
+-- Active: 1784853713968@@127.0.0.1@5433@SENA
 -- Tabla de ensayos de aptitud
 CREATE TABLE IF NOT EXISTS ensayos (
     id_ensayo SERIAL PRIMARY KEY,
@@ -63,4 +63,18 @@ BEGIN
     END IF;
 END$$;
 
+-- Añadir columna nacionalidad (sólo 'mexico' o 'colombia') y actualizar existentes a 'mexico'
+
 ALTER TABLE ensayos ALTER COLUMN id_subarea DROP NOT NULL;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ensayos' AND column_name='nacionalidad') THEN
+        EXECUTE 'ALTER TABLE ensayos ADD COLUMN nacionalidad VARCHAR(20) DEFAULT ''mexico''';
+        EXECUTE 'UPDATE ensayos SET nacionalidad = ''mexico'' WHERE nacionalidad IS NULL';
+        EXECUTE 'ALTER TABLE ensayos ALTER COLUMN nacionalidad SET NOT NULL';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_ensayos_nacionalidad') THEN
+        EXECUTE 'ALTER TABLE ensayos ADD CONSTRAINT chk_ensayos_nacionalidad CHECK (nacionalidad IN (''mexico'',''colombia''))';
+    END IF;
+END$$;
