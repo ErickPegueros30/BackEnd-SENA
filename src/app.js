@@ -6,6 +6,8 @@ import path from 'path';
 import routes from './config/routes/index.js';
 
 const app = express();
+// Trust reverse proxy (nginx) so req.protocol reflects original scheme when using X-Forwarded-* headers
+app.set('trust proxy', true)
 // 🔧 Middlewares base
 app.use(cors());
 // Allow larger JSON/urlencoded bodies (avatar data URLs can be large)

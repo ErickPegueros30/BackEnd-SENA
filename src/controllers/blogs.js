@@ -13,7 +13,11 @@ const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_MB || 20) * 1024 * 1024
 const buildImageUrl = (req, imgPath) => {
   if (!imgPath) return null
   if (imgPath.startsWith('http')) return imgPath
-  return `${req.protocol}://${req.get('host')}${imgPath.startsWith('/') ? '' : '/'}${imgPath}`
+  // Prefer explicit SITE_URL env var when present (e.g. https://sena.mx)
+  const siteUrl = process.env.SITE_URL
+  if (siteUrl) return siteUrl.replace(/\/$/, '') + (imgPath.startsWith('/') ? imgPath : '/' + imgPath)
+  const proto = (req && (req.headers['x-forwarded-proto'] || req.protocol)) || 'https'
+  return `${proto}://${req.get('host')}${imgPath.startsWith('/') ? '' : '/'}${imgPath}`
 }
 
 const slugify = (text) =>
