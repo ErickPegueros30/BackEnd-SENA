@@ -6,6 +6,8 @@ const UPLOADS_BLOGS_DIR = path.join(process.cwd(), 'uploads', 'blogs')
 const ensureUploadsDir = async () => {
   try { await fs.promises.mkdir(UPLOADS_BLOGS_DIR, { recursive: true }) } catch (_) { }
 }
+// Máximo por upload en bytes (por defecto 20 MB)
+const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_MB || 20) * 1024 * 1024
 
 // ── helpers ───────────────────────────────────────────────────────────
 const buildImageUrl = (req, imgPath) => {
@@ -183,9 +185,14 @@ export const createPost = async (req, res) => {
 
     // Guardar imagen si viene como dataURL
     if (req.body.thumbnailDataUrl) {
-      await saveImage(row.id, req.body.thumbnailDataUrl)
-      const imgRow = await pool.query('SELECT featured_image FROM blog_posts WHERE id = $1', [row.id])
-      row.featured_image = imgRow.rows[0]?.featured_image
+      try {
+        await saveImage(row.id, req.body.thumbnailDataUrl)
+        const imgRow = await pool.query('SELECT featured_image FROM blog_posts WHERE id = $1', [row.id])
+        row.featured_image = imgRow.rows[0]?.featured_image
+      } catch (err) {
+        if (err && err.message === 'FILE_TOO_LARGE') return res.status(413).json({ ok: false, message: 'Imagen demasiado grande' })
+        throw err
+      }
     }
 
     // Re-query para traer joins
@@ -247,7 +254,12 @@ export const updatePost = async (req, res) => {
 
     // Imagen
     if (req.body.thumbnailDataUrl) {
-      await saveImage(id, req.body.thumbnailDataUrl)
+      try {
+        await saveImage(id, req.body.thumbnailDataUrl)
+      } catch (err) {
+        if (err && err.message === 'FILE_TOO_LARGE') return res.status(413).json({ ok: false, message: 'Imagen demasiado grande' })
+        throw err
+      }
     }
 
     const full = await pool.query(`${BASE_SELECT} WHERE p.id = $1`, [id])
@@ -283,8 +295,13 @@ export const uploadImage = async (req, res) => {
     const { id } = req.params
     const { thumbnail } = req.body
     if (!thumbnail) return res.status(400).json({ ok: false, message: 'thumbnail requerido (dataURL base64)' })
-    const relPath = await saveImage(id, thumbnail)
-    return res.json({ ok: true, imageUrl: buildImageUrl(req, relPath) })
+    try {
+      const relPath = await saveImage(id, thumbnail)
+      return res.json({ ok: true, imageUrl: buildImageUrl(req, relPath) })
+    } catch (err) {
+      if (err && err.message === 'FILE_TOO_LARGE') return res.status(413).json({ ok: false, message: 'Imagen demasiado grande' })
+      throw err
+    }
   } catch (err) {
     console.error('uploadImage error', err)
     return res.status(500).json({ ok: false, message: 'Error subiendo imagen' })
@@ -315,6 +332,7 @@ async function saveImage(postId, dataUrl) {
   if (!matches) throw new Error('Formato de imagen no válido')
   const ext = matches[1].split('/')[1] || 'jpg'
   const buffer = Buffer.from(matches[2], 'base64')
+  if (buffer.length > MAX_UPLOAD_BYTES) throw new Error('FILE_TOO_LARGE')
   const filename = `${postId}-${Date.now()}.${ext}`
   const relPath = `/uploads/blogs/${filename}`
   await fs.promises.writeFile(path.join(UPLOADS_BLOGS_DIR, filename), buffer)

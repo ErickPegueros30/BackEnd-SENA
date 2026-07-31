@@ -8,6 +8,8 @@ const ensureDirs = async () => {
   try { await fs.promises.mkdir(UPLOADS_HOME_DIR, { recursive: true }) } catch (_) {}
   try { await fs.promises.mkdir(UPLOADS_HOME_CAR_DIR, { recursive: true }) } catch (_) {}
 }
+// Máximo por upload en bytes (por defecto 50 MB)
+const MAX_UPLOAD_BYTES = (Number(process.env.MAX_UPLOAD_MB) || 50) * 1024 * 1024
 
 const buildImageUrl = (req, imgPath) => {
   if (!imgPath) return null
@@ -79,6 +81,7 @@ export const uploadSectionImage = async (req, res) => {
     if (!matches) return res.status(400).json({ ok: false, message: 'Formato de imagen no válido' })
     const ext = matches[1].split('/')[1] || 'jpg'
     const buffer = Buffer.from(matches[2], 'base64')
+    if (buffer.length > MAX_UPLOAD_BYTES) return res.status(413).json({ ok: false, message: 'Imagen demasiado grande' })
     const filename = `home-${id || 'new'}-${Date.now()}.${ext}`
     const relPath = `/uploads/pagina/home/${filename}`
     await fs.promises.writeFile(path.join(UPLOADS_HOME_DIR, filename), buffer)
@@ -117,6 +120,7 @@ export const createCarruselItem = async (req, res) => {
       if (!matches) return res.status(400).json({ ok: false, message: 'Formato de imagen no válido' })
       const ext = matches[1].split('/')[1] || 'jpg'
       const buffer = Buffer.from(matches[2], 'base64')
+      if (buffer.length > MAX_UPLOAD_BYTES) return res.status(413).json({ ok: false, message: 'Imagen demasiado grande' })
       const filename = `carrusel-${Date.now()}.${ext}`
       relPath = `/uploads/pagina/home/carrusel/${filename}`
       await fs.promises.writeFile(path.join(UPLOADS_HOME_CAR_DIR, filename), buffer)
