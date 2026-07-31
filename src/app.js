@@ -11,7 +11,9 @@ app.use(cors());
 // Allow larger JSON/urlencoded bodies (avatar data URLs can be large)
 // Allow larger JSON/urlencoded bodies for image data URLs. In production
 // ensure the reverse proxy (nginx) also allows this size (client_max_body_size).
-const DEFAULT_UPLOAD_LIMIT = process.env.MAX_UPLOAD_MB || '50mb'
+// Accept either a value like '50mb' or a plain number in MB (e.g. '50').
+const rawLimit = process.env.MAX_UPLOAD_MB || '50mb'
+const DEFAULT_UPLOAD_LIMIT = /^[0-9]+$/.test(String(rawLimit)) ? `${rawLimit}mb` : rawLimit
 app.use(express.json({ limit: DEFAULT_UPLOAD_LIMIT }));
 app.use(express.urlencoded({ extended: true, limit: DEFAULT_UPLOAD_LIMIT }));
 app.use(morgan('dev'));
