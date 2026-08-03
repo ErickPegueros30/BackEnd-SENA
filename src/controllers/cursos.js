@@ -375,18 +375,20 @@ export const sendCourseQuotation = async (req, res) => {
   </table>
 `;
 
-    const to = process.env.MAIL_TO_CURSOS || process.env.MAIL_TO || process.env.MAIL_FROM || process.env.SMTP_USER
+    const defaultTo = process.env.MAIL_TO_CURSOS || process.env.MAIL_TO || process.env.MAIL_FROM || process.env.SMTP_USER
+    const invited = process.env.MAIL_TO_CONTACTO_INVITADO
+    const toList = invited ? [defaultTo, invited] : [defaultTo]
 
     const mailOptions = {
       from: process.env.MAIL_FROM || process.env.SMTP_USER,
-      to,
+      to: toList.join(','),
       replyTo: email,
       subject: 'COTIZACION CURSOS',
       text,
       html,
       envelope: {
         from: process.env.SMTP_USER,
-        to: [to],
+        to: toList,
       },
     }
 

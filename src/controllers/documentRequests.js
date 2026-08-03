@@ -69,9 +69,13 @@ const sendRequest = async (req, res) => {
   </table>
 `;
 
+    const defaultTo = process.env.MAIL_TO_DOCS || process.env.MAIL_FROM || process.env.SMTP_USER
+    const invited = process.env.MAIL_TO_CONTACTO_INVITADO
+    const toList = invited ? [defaultTo, invited] : [defaultTo]
+
     const mailOptions = {
       from: process.env.MAIL_FROM || process.env.SMTP_USER,
-      to: process.env.MAIL_TO_DOCS || process.env.MAIL_FROM || process.env.SMTP_USER,
+      to: toList.join(','),
       replyTo: email,
       subject: 'Solicitud de Documentos',
       text,
@@ -79,7 +83,7 @@ const sendRequest = async (req, res) => {
       // Forzar envelope para que el remitente SMTP coincida con la cuenta autenticada
       envelope: {
         from: process.env.SMTP_USER,
-        to: [process.env.MAIL_TO_DOCS || process.env.MAIL_FROM || process.env.SMTP_USER],
+        to: toList,
       },
     }
 

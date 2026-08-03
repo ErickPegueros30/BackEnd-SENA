@@ -7,7 +7,16 @@ import routes from './config/routes/index.js';
 
 const app = express();
 // Trust reverse proxy (nginx) so req.protocol reflects original scheme when using X-Forwarded-* headers
-app.set('trust proxy', true)
+// Use environment variable `TRUST_PROXY` to control this. Default to 'loopback' (trust only localhost proxies).
+// Set to 'true' only if you intentionally trust all proxies (not recommended).
+const trustProxyEnv = process.env.TRUST_PROXY || 'loopback'
+if (trustProxyEnv === 'false') {
+  app.set('trust proxy', false)
+} else if (trustProxyEnv === 'true') {
+  app.set('trust proxy', true)
+} else {
+  app.set('trust proxy', trustProxyEnv)
+}
 // 🔧 Middlewares base
 app.use(cors());
 // Allow larger JSON/urlencoded bodies (avatar data URLs can be large)
