@@ -69,6 +69,7 @@ UPDATE credenciales SET activo = TRUE WHERE activo IS NULL;
 ALTER TABLE credenciales
 ADD COLUMN IF NOT EXISTS ultima_actividad TIMESTAMP WITH TIME ZONE NULL;
 
+-- No establecer valor por defecto; se actualizará al iniciar sesión o desde la app
 -- Agrega columnas 'telefono' y 'foto_perfil' a la tabla 'usuarios' y/o 'credenciales' según diseño
 ALTER TABLE usuarios
 ADD COLUMN IF NOT EXISTS telefono VARCHAR(50);
@@ -77,6 +78,8 @@ ADD COLUMN IF NOT EXISTS telefono VARCHAR(50);
 ALTER TABLE usuarios
 ADD COLUMN IF NOT EXISTS foto_perfil VARCHAR(255);
 
+-- Active: 1769806382337@@localhost@5433@SENA
+-- Migration: Create events table and participants link table
 CREATE TABLE IF NOT EXISTS eventos (
   id_evento SERIAL PRIMARY KEY,
   titulo VARCHAR(255) NOT NULL,
@@ -102,10 +105,13 @@ CREATE INDEX IF NOT EXISTS idx_eventos_inicio_fecha ON eventos(inicio_fecha);
 -- Restrict estado to a known set
 ALTER TABLE eventos ADD CONSTRAINT chk_evento_estado CHECK (estado IN ('activo','proximo','completado','cancelado'));
 CREATE INDEX IF NOT EXISTS idx_eventos_estado ON eventos(estado);
-
 -- Add featured boolean to eventos table
 ALTER TABLE eventos ADD COLUMN featured BOOLEAN DEFAULT FALSE;
 
+-- Active: 1769806382337@@localhost@5433@SENA
+BEGIN;
+
+-- TABLAS PARA RAMAS / SUBRAMAS (sin `descripcion` ni `creado_at`)
 CREATE TABLE IF NOT EXISTS ramas (
     id SERIAL PRIMARY KEY,
     nombre TEXT NOT NULL UNIQUE
@@ -246,8 +252,18 @@ INSERT INTO subareas (area_id, nombre) VALUES
 ((SELECT id FROM areas WHERE nombre='Mediciones especiales'), 'Baños líquidos')
 ON CONFLICT (area_id, nombre) DO NOTHING;
 
+COMMIT;
+
+-- Add icon column to areas and ramas
+BEGIN;
+
 ALTER TABLE IF EXISTS areas ADD COLUMN IF NOT EXISTS icon TEXT NULL;
 ALTER TABLE IF EXISTS ramas ADD COLUMN IF NOT EXISTS icon TEXT NULL;
+
+COMMIT;
+
+-- Migration: Add Invitado role, inscripciones table and cursos table
+BEGIN;
 
 -- Add Invitado role
 INSERT INTO roles (id_rol, nombre, prefijo)
@@ -300,7 +316,17 @@ CREATE TABLE IF NOT EXISTS inscripciones (
   created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now()
 );
 
+COMMIT;
+
+-- Migration: Add temario JSONB field to cursos
+BEGIN;
+
 ALTER TABLE cursos ADD COLUMN IF NOT EXISTS temario JSONB DEFAULT '[]'::jsonb;
+
+COMMIT;
+
+-- Migration: Convert organizador_id from VARCHAR to INTEGER and add FK
+BEGIN;
 
 -- Add temporary integer column
 ALTER TABLE cursos ADD COLUMN IF NOT EXISTS organizador_id_int INTEGER;
@@ -317,12 +343,16 @@ ALTER TABLE cursos DROP COLUMN IF EXISTS organizador_id CASCADE;
 -- Rename temporary column to organizador_id
 ALTER TABLE cursos RENAME COLUMN organizador_id_int TO organizador_id;
 
--- Add FK constraint to usuarios(id_usuario)
-ALTER TABLE cursos ADD CONSTRAINT fk_cursos_organizador FOREIGN KEY (organizador_id) REFERENCES usuarios(id_usuario);
-
 -- Add index for faster lookups
 CREATE INDEX IF NOT EXISTS idx_cursos_organizador_id ON cursos(organizador_id);
 
+COMMIT;
+
+-- Migration: Clean invalid organizador_id values in cursos (set to NULL when no matching usuarios)
+BEGIN;
+
+-- Set organizador_id to NULL for any non-null value that does not match usuarios.id_usuario
+-- Works whether usuarios.id_usuario is text or integer by comparing as text
 UPDATE cursos
 SET organizador_id = NULL
 WHERE organizador_id IS NOT NULL
@@ -330,6 +360,10 @@ WHERE organizador_id IS NOT NULL
     -- comparar ambos como texto para evitar errores si una columna es integer y la otra text
     SELECT 1 FROM usuarios u WHERE u.id_usuario::text = cursos.organizador_id::text
   );
+
+COMMIT;
+-- Migration: Ensure cursos.organizador_id is VARCHAR(10) and FK matches usuarios(id_usuario)
+BEGIN;
 
 -- Drop existing FK if present (name may differ)
 ALTER TABLE cursos DROP CONSTRAINT IF EXISTS fk_cursos_organizador;
@@ -342,6 +376,11 @@ ALTER TABLE cursos ADD CONSTRAINT fk_cursos_organizador FOREIGN KEY (organizador
 
 -- Add index for performance
 CREATE INDEX IF NOT EXISTS idx_cursos_organizador_id ON cursos(organizador_id);
+
+COMMIT;
+-- Active: 1778099167792@@187.124.49.53@5434@SENA
+-- Migration: Cotizaciones para ramas y áreas
+BEGIN;
 
 -- Si las combinaciones pueden repetirse, eliminar los índices UNIQUE existentes
 DROP INDEX IF EXISTS ux_cat_ramas_rama_ref_year;
@@ -696,6 +735,9 @@ Diferencia de fase: 0 a ±180°', 0, 0, 0, 0, 0, 0, 0),
 (8, 'SENA-FLUJO-07-2026-CFV', 2026, 'Ensayo de aptitud SENA-FLUJO-07-2026-CFM para la calibración de un Medidor de flujo de líquidos tipo Coriolis, 100 L/min a 1 000 L/min, comparación estática arranque y paro, fluido de referencia agua. Se deberá calibrar en 4 flujos en el alcance de 100 L/min a 1 000 L/min.', 0, 0, 0, 0, 0, 0, 0),
 (2, ' SENA-TEMPERATURA & HUMEDAD-01-2024-CTH', 2026, 'Ensayo de aptitud modalidad bilateral SENA-TEMPERATURA & HUMEDAD-01-2024-CTH, para la calibración de tres temperaturas y tres humedades en un termohigrometro. ', 13003.2, 0, 17164.224, 10922.688, 10532.592, 619.2, 501.552),
 (11, ' SENA-TEMPERATURA & HUMEDAD-01-2024-CTH', 2026, 'Ensayo de aptitud modalidad bilateral SENA-TEMPERATURA & HUMEDAD-01-2024-CTH, para la calibración de tres temperaturas y tres humedades en un termohigrometro. ', 13003.2, 0, 17164.224, 10922.688, 10532.592, 619.2, 501.552);
+COMMIT;
+-- Migration: Tabla cotizaciones
+BEGIN;
 
 CREATE TABLE IF NOT EXISTS cotizaciones (
   id_cotizacion SERIAL PRIMARY KEY,
@@ -715,7 +757,6 @@ CREATE TABLE IF NOT EXISTS cotizaciones (
 );
 
 CREATE INDEX IF NOT EXISTS idx_cotizaciones_usuario ON cotizaciones(usuario_id);
-CREATE INDEX IF NOT EXISTS idx_cotizaciones_precio ON cotizaciones(precio_tipo, precio_id);
 
 -- Items asociados a una cotización: referencia a área o rama (una de las dos)
 CREATE TABLE IF NOT EXISTS cotizacion_items (
@@ -731,6 +772,14 @@ CREATE TABLE IF NOT EXISTS cotizacion_items (
   CONSTRAINT ck_item_area_rama CHECK ((area_id IS NOT NULL) OR (rama_id IS NOT NULL))
 );
 
+COMMIT;
+-- Active: 1769806382337@@localhost@5433@postgres
+-- V16__Blogs.sql
+-- Tablas para el módulo de Blog / Investigaciones
+
+BEGIN;
+
+-- ─── Categorías de blog ───────────────────────────────────────────────
 CREATE TABLE blog_categories (
   id SERIAL PRIMARY KEY,
   name VARCHAR(150) NOT NULL,
@@ -851,3 +900,190 @@ CREATE INDEX idx_blog_posts_status     ON blog_posts (status, published_at DESC)
 CREATE INDEX idx_blog_posts_featured   ON blog_posts (featured) WHERE featured = true;
 CREATE INDEX idx_blog_posts_tags       ON blog_posts USING GIN (tags);
 CREATE INDEX idx_blog_comments_post    ON blog_comments (post_id);
+
+COMMIT;
+
+-- Active: 1778099167792@@187.124.49.53@5434@SENA
+-- V17__Paginas.sql
+-- Tablas para la gestión de páginas (módulo "paginas"), enfocadas en `home`.
+
+BEGIN;
+
+-- Tabla principal para secciones de la página Home
+CREATE TABLE IF NOT EXISTS p_home (
+  id_home SERIAL PRIMARY KEY,
+  seccion VARCHAR(150) NOT NULL,
+  contenido TEXT,
+  usuario_cambio VARCHAR(10)
+);
+
+-- Carrousel / galería asociado a p_home
+CREATE TABLE IF NOT EXISTS p_home_carrusel (
+  id_carrusel SERIAL PRIMARY KEY,
+  id_home INT NOT NULL REFERENCES p_home(id_home) ON DELETE CASCADE,
+  ubicacion VARCHAR(1024) NOT NULL,
+  estatus BOOLEAN NOT NULL DEFAULT true,
+  orden INT DEFAULT 0
+);
+
+-- Bitácora de cambios (puede referenciar a p_home)
+CREATE TABLE IF NOT EXISTS p_bitacora (
+  id SERIAL PRIMARY KEY,
+  id_pagina INT REFERENCES p_home(id_home) ON DELETE SET NULL,
+  nombre VARCHAR(200),
+  modificacion TIMESTAMPTZ NOT NULL DEFAULT now(),
+  usuario_cambio VARCHAR(10)
+);
+
+-- Añadir FK a usuarios si la tabla usuarios existe
+DO $$
+BEGIN
+  IF to_regclass('public.usuarios') IS NOT NULL THEN
+    ALTER TABLE IF EXISTS p_home
+      ADD CONSTRAINT fk_p_home_usuario_cambio FOREIGN KEY (usuario_cambio) REFERENCES usuarios(id_usuario) ON DELETE SET NULL;
+
+    ALTER TABLE IF EXISTS p_bitacora
+      ADD CONSTRAINT fk_p_bitacora_usuario FOREIGN KEY (usuario_cambio) REFERENCES usuarios(id_usuario) ON DELETE SET NULL;
+  ELSE
+    RAISE NOTICE 'Tabla usuarios no encontrada; las FK a usuarios no fueron creadas.';
+  END IF;
+END
+$$;
+
+-- Índices útiles
+CREATE INDEX IF NOT EXISTS idx_p_home_seccion ON p_home (seccion);
+CREATE INDEX IF NOT EXISTS idx_p_home_carrusel_home ON p_home_carrusel (id_home);
+CREATE INDEX IF NOT EXISTS idx_p_bitacora_pagina ON p_bitacora (id_pagina);
+
+COMMIT;
+
+-- Active: 1784853713968@@127.0.0.1@5433@SENA
+-- Tabla de ensayos de aptitud
+CREATE TABLE IF NOT EXISTS ensayos (
+    id_ensayo SERIAL PRIMARY KEY,
+    codigo VARCHAR(100) NOT NULL UNIQUE,
+    descripcion TEXT NOT NULL,
+    ciclo VARCHAR(20) NOT NULL, 
+    anio INTEGER NOT NULL,                
+    id_subarea INTEGER,
+    area_id INTEGER,
+    rama_id INTEGER,
+    subrama_id INTEGER,
+    inscripcion_inicio DATE NOT NULL,
+    inscripcion_fin DATE NOT NULL,
+    fecha_inicio_ensayo DATE NOT NULL,
+    fecha_detalle VARCHAR(255),            
+    disponible BOOLEAN NOT NULL DEFAULT TRUE
+    ,created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
+    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now()
+);
+
+-- Índices para búsquedas y filtros frecuentes
+CREATE INDEX idx_ensayos_anio ON ensayos(anio);
+CREATE INDEX idx_ensayos_subarea ON ensayos(id_subarea);
+CREATE INDEX idx_ensayos_disponible ON ensayos(disponible);
+CREATE INDEX idx_ensayos_codigo ON ensayos(codigo);
+CREATE INDEX idx_ensayos_area ON ensayos(area_id);
+CREATE INDEX idx_ensayos_rama ON ensayos(rama_id);
+CREATE INDEX idx_ensayos_subrama ON ensayos(subrama_id);
+
+-- Crear trigger para actualizar updated_at sólo si la función existe
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'set_updated_at_timestamp') THEN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_set_updated_at_ensayos') THEN
+            EXECUTE 'CREATE TRIGGER trg_set_updated_at_ensayos BEFORE UPDATE ON ensayos FOR EACH ROW EXECUTE FUNCTION set_updated_at_timestamp()';
+        END IF;
+    END IF;
+END$$;
+
+-- Crear constraints FK sólo si las tablas referenciadas ya existen (evita errores si se ejecuta fuera de orden)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class WHERE relname='subareas' AND relkind='r') THEN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='fk_ensayos_subareas') THEN
+            EXECUTE 'ALTER TABLE ensayos ADD CONSTRAINT fk_ensayos_subareas FOREIGN KEY (id_subarea) REFERENCES subareas(id) ON DELETE RESTRICT';
+        END IF;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_class WHERE relname='areas' AND relkind='r') THEN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='fk_ensayos_areas') THEN
+            EXECUTE 'ALTER TABLE ensayos ADD CONSTRAINT fk_ensayos_areas FOREIGN KEY (area_id) REFERENCES areas(id) ON DELETE RESTRICT';
+        END IF;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_class WHERE relname='ramas' AND relkind='r') THEN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='fk_ensayos_ramas') THEN
+            EXECUTE 'ALTER TABLE ensayos ADD CONSTRAINT fk_ensayos_ramas FOREIGN KEY (rama_id) REFERENCES ramas(id) ON DELETE RESTRICT';
+        END IF;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_class WHERE relname='subramas' AND relkind='r') THEN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='fk_ensayos_subramas') THEN
+            EXECUTE 'ALTER TABLE ensayos ADD CONSTRAINT fk_ensayos_subramas FOREIGN KEY (subrama_id) REFERENCES subramas(id) ON DELETE RESTRICT';
+        END IF;
+    END IF;
+END$$;
+
+-- Añadir columna nacionalidad (sólo 'mexico' o 'colombia') y actualizar existentes a 'mexico'
+
+ALTER TABLE ensayos ALTER COLUMN id_subarea DROP NOT NULL;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ensayos' AND column_name='nacionalidad') THEN
+        EXECUTE 'ALTER TABLE ensayos ADD COLUMN nacionalidad VARCHAR(20) DEFAULT ''mexico''';
+        EXECUTE 'UPDATE ensayos SET nacionalidad = ''mexico'' WHERE nacionalidad IS NULL';
+        EXECUTE 'ALTER TABLE ensayos ALTER COLUMN nacionalidad SET NOT NULL';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_ensayos_nacionalidad') THEN
+        EXECUTE 'ALTER TABLE ensayos ADD CONSTRAINT chk_ensayos_nacionalidad CHECK (nacionalidad IN (''mexico'',''colombia''))';
+    END IF;
+END$$;
+
+-- Añade constraints FK para ensayos después de que existan las tablas referenciadas
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_class WHERE relname='ensayos' AND relkind='r') THEN
+    IF EXISTS (SELECT 1 FROM pg_class WHERE relname='subareas' AND relkind='r') THEN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='fk_ensayos_subareas') THEN
+        EXECUTE 'ALTER TABLE ensayos ADD CONSTRAINT fk_ensayos_subareas FOREIGN KEY (id_subarea) REFERENCES subareas(id) ON DELETE RESTRICT';
+      END IF;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_class WHERE relname='areas' AND relkind='r') THEN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='fk_ensayos_areas') THEN
+        EXECUTE 'ALTER TABLE ensayos ADD CONSTRAINT fk_ensayos_areas FOREIGN KEY (area_id) REFERENCES areas(id) ON DELETE RESTRICT';
+      END IF;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_class WHERE relname='ramas' AND relkind='r') THEN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='fk_ensayos_ramas') THEN
+        EXECUTE 'ALTER TABLE ensayos ADD CONSTRAINT fk_ensayos_ramas FOREIGN KEY (rama_id) REFERENCES ramas(id) ON DELETE RESTRICT';
+      END IF;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_class WHERE relname='subramas' AND relkind='r') THEN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='fk_ensayos_subramas') THEN
+        EXECUTE 'ALTER TABLE ensayos ADD CONSTRAINT fk_ensayos_subramas FOREIGN KEY (subrama_id) REFERENCES subramas(id) ON DELETE RESTRICT';
+      END IF;
+    END IF;
+  END IF;
+END$$;
+
+
+CREATE TABLE IF NOT EXISTS interlaboratorio(
+    id_interlaboratorio SERIAL PRIMARY KEY,
+    referencia VARCHAR(100) NOT NULL UNIQUE,
+    descripcion TEXT NOT NULL,
+    anio INTEGER NOT NULL,
+    inscripcion_inicio DATE NOT NULL,
+    inscripcion_fin DATE NOT NULL,
+    fecha_inicio_interlaboratorio DATE NOT NULL,
+    fecha_detalle VARCHAR(255),
+    disponible BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE INDEX idx_interlaboratorio_anio ON interlaboratorio(anio);
+CREATE INDEX idx_interlaboratorio_disponible ON interlaboratorio(disponible);
+
+-- Agregar columna 'tipo' a la tabla ensayos
+ALTER TABLE ensayos
+  ADD COLUMN IF NOT EXISTS tipo VARCHAR(20) DEFAULT 'principal';
+
+-- Opcional: crear índice para búsquedas rápidas por tipo
+CREATE INDEX IF NOT EXISTS idx_ensayos_tipo ON ensayos(tipo);
