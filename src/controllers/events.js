@@ -1,17 +1,15 @@
 import fs from 'fs'
 import path from 'path'
 import pool from '../config/db.js'
+import { uploadBuffer } from '../utils/uploader.js'
+import { buildImageUrl } from '../utils/image.js'
 
 const UPLOADS_EVENTS_DIR = path.join(process.cwd(), 'uploads', 'events')
 const ensureUploadsDir = async () => {
   try { await fs.promises.mkdir(UPLOADS_EVENTS_DIR, { recursive: true }) } catch (e) { }
 }
 
-const buildThumbnailUrl = (req, miniatura) => {
-  if (!miniatura) return null
-  if (miniatura.startsWith('http')) return miniatura
-  return `${req.protocol}://${req.get('host')}${miniatura.startsWith('/') ? '' : '/'}${miniatura}`
-}
+
 
 const toClientEvent = (row, req = null) => ({
   id: row.id_evento,
@@ -34,7 +32,7 @@ const toClientEvent = (row, req = null) => ({
   updatedAt: row.updated_at ? row.updated_at.toISOString() : null,
   organizer: row.organizer_id ? { id: row.organizer_id, name: row.organizer_name, email: row.organizer_email } : null,
   participants: [],
-  thumbnailUrl: req ? buildThumbnailUrl(req, row.miniatura) : (row.miniatura || null)
+  thumbnailUrl: req ? buildImageUrl(req, row.miniatura) : (row.miniatura || null)
 })
 
 export const listEvents = async (req, res) => {
@@ -85,10 +83,9 @@ export const createEvent = async (req, res) => {
     const result = await pool.query(q, params)
     const row = result.rows[0]
 
-    // If client provided a thumbnail dataURL, save it and persist miniatura path
+    // If client provided a thumbnail dataURL, save it to remote (cPanel) and persist miniatura path
     if (req.body.thumbnailDataUrl) {
       try {
-        await ensureUploadsDir()
         const matches = req.body.thumbnailDataUrl.match(/^data:(image\/\w+);base64,(.+)$/)
         if (matches) {
           const mime = matches[1]
@@ -96,9 +93,7 @@ export const createEvent = async (req, res) => {
           const data = matches[2]
           const buffer = Buffer.from(data, 'base64')
           const filename = `${row.id_evento}.${ext}`
-          const relPath = `/uploads/events/${filename}`
-          const filepath = path.join(UPLOADS_EVENTS_DIR, filename)
-          await fs.promises.writeFile(filepath, buffer)
+          const relPath = await uploadBuffer(buffer, filename, 'events')
           await pool.query('UPDATE eventos SET miniatura = $1 WHERE id_evento = $2', [relPath, row.id_evento])
           row.miniatura = relPath
         }
@@ -128,16 +123,14 @@ export const updateEvent = async (req, res) => {
         await ensureUploadsDir()
         const matches = req.body.thumbnailDataUrl.match(/^data:(image\/\w+);base64,(.+)$/)
         if (matches) {
-          const mime = matches[1]
-          const ext = mime.split('/')[1] || 'jpg'
-          const data = matches[2]
-          const buffer = Buffer.from(data, 'base64')
-          const filename = `${row.id_evento}.${ext}`
-          const relPath = `/uploads/events/${filename}`
-          const filepath = path.join(UPLOADS_EVENTS_DIR, filename)
-          await fs.promises.writeFile(filepath, buffer)
-          await pool.query('UPDATE eventos SET miniatura = $1 WHERE id_evento = $2', [relPath, row.id_evento])
-          row.miniatura = relPath
+            const mime = matches[1]
+            const ext = mime.split('/')[1] || 'jpg'
+            const data = matches[2]
+            const buffer = Buffer.from(data, 'base64')
+            const filename = `${row.id_evento}.${ext}`
+            const relPath = await uploadBuffer(buffer, filename, 'events')
+            await pool.query('UPDATE eventos SET miniatura = $1 WHERE id_evento = $2', [relPath, row.id_evento])
+            row.miniatura = relPath
         }
       } catch (e) { console.error('thumbnail save error', e) }
     }
@@ -185,12 +178,15 @@ export const uploadThumbnail = async (req, res) => {
     const data = matches[2]
     const buffer = Buffer.from(data, 'base64')
     const filename = `${id}.${ext}`
-    const relPath = `/uploads/events/${filename}`
-    const filepath = path.join(UPLOADS_EVENTS_DIR, filename)
-    await fs.promises.writeFile(filepath, buffer)
-    await pool.query('UPDATE eventos SET miniatura = $1 WHERE id_evento = $2', [relPath, id])
-    const url = buildThumbnailUrl(req, relPath)
-    return res.json({ ok: true, thumbnailUrl: url })
+    try {
+      const rel = await uploadBuffer(buffer, filename, 'events')
+      await pool.query('UPDATE eventos SET miniatura = $1 WHERE id_evento = $2', [rel, id])
+      const url = buildImageUrl(req, rel)
+      return res.json({ ok: true, thumbnailUrl: url })
+    } catch (e) {
+      console.error('uploadThumbnail error', e)
+      return res.status(500).json({ ok: false, message: 'Error subiendo miniatura' })
+    }
   } catch (err) {
     console.error('uploadThumbnail error', err)
     return res.status(500).json({ ok: false, message: 'Error subiendo miniatura' })

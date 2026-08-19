@@ -1,6 +1,8 @@
 import fs from 'fs'
 import path from 'path'
 import pool from '../config/db.js'
+import { uploadBuffer } from '../utils/uploader.js'
+import { buildImageUrl } from '../utils/image.js'
 
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads', 'avatars')
 
@@ -28,8 +30,7 @@ export const getProfile = async (req, res) => {
     const dbFoto = row.foto_perfil || null
     let avatarUrl = null
     if (dbFoto) {
-      // assume stored path is relative under /uploads
-      avatarUrl = dbFoto.startsWith('http') ? dbFoto : `${req.protocol}://${req.get('host')}${dbFoto.startsWith('/') ? '' : '/'}${dbFoto}`
+      avatarUrl = dbFoto.startsWith('http') ? dbFoto : buildImageUrl(req, dbFoto)
     } else {
       const avatarPath = path.join(UPLOADS_DIR, `${id}.jpg`)
       const avatarExists = fs.existsSync(avatarPath)
@@ -111,15 +112,18 @@ export const uploadAvatar = async (req, res) => {
     const buffer = Buffer.from(data, 'base64')
 
     const filename = `${id}.jpg`
-    const filepath = path.join(UPLOADS_DIR, filename)
-    await fs.promises.writeFile(filepath, buffer)
-    const avatarUrl = `${req.protocol}://${req.get('host')}/uploads/avatars/${filename}`
-    // persist foto_perfil path in usuarios table (relative path under /uploads)
     try {
-      const relPath = `/uploads/avatars/${filename}`
-      await pool.query('UPDATE usuarios SET foto_perfil = $1 WHERE id_usuario = $2', [relPath, id])
-    } catch (e) { /* ignore DB write errors */ }
-    return res.json({ ok: true, avatarUrl })
+      const relPath = await uploadBuffer(buffer, filename, 'avatars')
+      const avatarUrl = buildImageUrl(req, relPath)
+      // persist foto_perfil path in usuarios table (relative path under /uploads)
+      try {
+        await pool.query('UPDATE usuarios SET foto_perfil = $1 WHERE id_usuario = $2', [relPath, id])
+      } catch (e) { /* ignore DB write errors */ }
+      return res.json({ ok: true, avatarUrl })
+    } catch (e) {
+      console.error('uploadAvatar error', e)
+      return res.status(500).json({ ok: false, message: 'Error subiendo avatar' })
+    }
   } catch (err) {
     console.error('uploadAvatar error', err)
     return res.status(500).json({ ok: false, message: 'Error subiendo avatar' })

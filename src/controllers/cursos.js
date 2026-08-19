@@ -2,17 +2,15 @@ import fs from 'fs'
 import path from 'path'
 import { sendMail } from '../config/mailer.js'
 import pool from '../config/db.js'
+import { uploadBuffer } from '../utils/uploader.js'
+import { buildImageUrl } from '../utils/image.js'
 
 const UPLOADS_COURSES_DIR = path.join(process.cwd(), 'uploads', 'courses')
 const ensureUploadsDirCourses = async () => {
   try { await fs.promises.mkdir(UPLOADS_COURSES_DIR, { recursive: true }) } catch (e) { }
 }
 
-const buildThumbnailUrl = (req, miniatura) => {
-  if (!miniatura) return null
-  if (miniatura.startsWith('http')) return miniatura
-  return `${req.protocol}://${req.get('host')}${miniatura.startsWith('/') ? '' : '/'}${miniatura}`
-}
+// using buildImageUrl from utils
 
 const safeDate = (d) => {
   if (!d) return null
@@ -57,11 +55,11 @@ const toClientCourse = (row, req = null) => ({
   instructor: {
     id: row.organizador_id || row.organizer_id || null,
     name: row.org_nombre ? `${row.org_nombre}${row.org_primer_apellido ? ' ' + row.org_primer_apellido : ''}` : null,
-    avatar: req ? buildThumbnailUrl(req, row.org_foto) : (row.org_foto || null)
+    avatar: req ? buildImageUrl(req, row.org_foto) : (row.org_foto || null)
   },
   createdAt: (() => { const d = safeDate(row.created_at); return d ? d.toISOString() : null })(),
   updatedAt: (() => { const d = safeDate(row.updated_at); return d ? d.toISOString() : null })(),
-  thumbnailUrl: req ? buildThumbnailUrl(req, row.miniatura) : (row.miniatura || null)
+  thumbnailUrl: req ? buildImageUrl(req, row.miniatura) : (row.miniatura || null)
 })
 
 export const listCursos = async (req, res) => {
@@ -153,7 +151,6 @@ export const createCurso = async (req, res) => {
     // thumbnail handling (if provided as dataURL)
     if (req.body.thumbnailDataUrl) {
       try {
-        await ensureUploadsDirCourses()
         const matches = req.body.thumbnailDataUrl.match(/^data:(image\/\w+);base64,(.+)$/)
         if (matches) {
           const mime = matches[1]
@@ -161,9 +158,7 @@ export const createCurso = async (req, res) => {
           const data = matches[2]
           const buffer = Buffer.from(data, 'base64')
           const filename = `${row.id_curso}.${ext}`
-          const relPath = `/uploads/courses/${filename}`
-          const filepath = path.join(UPLOADS_COURSES_DIR, filename)
-          await fs.promises.writeFile(filepath, buffer)
+          const relPath = await uploadBuffer(buffer, filename, 'courses')
           await pool.query('UPDATE cursos SET miniatura = $1 WHERE id_curso = $2', [relPath, row.id_curso])
           row.miniatura = relPath
         }
@@ -216,7 +211,6 @@ export const updateCurso = async (req, res) => {
 
     if (req.body.thumbnailDataUrl) {
       try {
-        await ensureUploadsDirCourses()
         const matches = req.body.thumbnailDataUrl.match(/^data:(image\/\w+);base64,(.+)$/)
         if (matches) {
           const mime = matches[1]
@@ -224,9 +218,7 @@ export const updateCurso = async (req, res) => {
           const data = matches[2]
           const buffer = Buffer.from(data, 'base64')
           const filename = `${row.id_curso}.${ext}`
-          const relPath = `/uploads/courses/${filename}`
-          const filepath = path.join(UPLOADS_COURSES_DIR, filename)
-          await fs.promises.writeFile(filepath, buffer)
+          const relPath = await uploadBuffer(buffer, filename, 'courses')
           await pool.query('UPDATE cursos SET miniatura = $1 WHERE id_curso = $2', [relPath, row.id_curso])
           row.miniatura = relPath
         }
@@ -277,10 +269,15 @@ export const uploadThumbnail = async (req, res) => {
     const filename = `${id}.${ext}`
     const relPath = `/uploads/courses/${filename}`
     const filepath = path.join(UPLOADS_COURSES_DIR, filename)
-    await fs.promises.writeFile(filepath, buffer)
-    await pool.query('UPDATE cursos SET miniatura = $1 WHERE id_curso = $2', [relPath, id])
-    const url = buildThumbnailUrl(req, relPath)
-    return res.json({ ok: true, thumbnailUrl: url })
+    try {
+      const rel = await uploadBuffer(buffer, filename, 'courses')
+      await pool.query('UPDATE cursos SET miniatura = $1 WHERE id_curso = $2', [rel, id])
+      const url = buildImageUrl(req, rel)
+      return res.json({ ok: true, thumbnailUrl: url })
+    } catch (e) {
+      console.error('uploadThumbnail error', e)
+      return res.status(500).json({ ok: false, message: 'Error subiendo miniatura' })
+    }
   } catch (err) {
     console.error('uploadThumbnail error', err)
     return res.status(500).json({ ok: false, message: 'Error subiendo miniatura' })

@@ -1,6 +1,8 @@
 import fs from 'fs'
 import path from 'path'
 import pool from '../config/db.js'
+import { uploadBuffer } from '../utils/uploader.js'
+import { buildImageUrl } from '../utils/image.js'
 
 const UPLOADS_HOME_DIR = path.join(process.cwd(), 'uploads', 'pagina', 'home')
 const UPLOADS_HOME_CAR_DIR = path.join(UPLOADS_HOME_DIR, 'carrusel')
@@ -11,15 +13,7 @@ const ensureDirs = async () => {
 // Máximo por upload en bytes (por defecto 50 MB)
 const MAX_UPLOAD_BYTES = (Number(process.env.MAX_UPLOAD_MB) || 50) * 1024 * 1024
 
-const buildImageUrl = (req, imgPath) => {
-  if (!imgPath) return null
-  if (imgPath.startsWith('http')) return imgPath
-  // Prefer explicit SITE_URL env var when present (e.g. https://sena.mx)
-  const siteUrl = process.env.SITE_URL
-  if (siteUrl) return siteUrl.replace(/\/$/, '') + (imgPath.startsWith('/') ? imgPath : '/' + imgPath)
-  const proto = (req && (req.headers['x-forwarded-proto'] || req.protocol)) || 'https'
-  return `${proto}://${req.get('host')}${imgPath.startsWith('/') ? '' : '/'}${imgPath}`
-}
+// buildImageUrl provided by ../utils/image.js
 
 const toClientHome = (row, req) => ({
   id: row.id_home,
@@ -87,8 +81,7 @@ export const uploadSectionImage = async (req, res) => {
     const buffer = Buffer.from(matches[2], 'base64')
     if (buffer.length > MAX_UPLOAD_BYTES) return res.status(413).json({ ok: false, message: 'Imagen demasiado grande' })
     const filename = `home-${id || 'new'}-${Date.now()}.${ext}`
-    const relPath = `/uploads/pagina/home/${filename}`
-    await fs.promises.writeFile(path.join(UPLOADS_HOME_DIR, filename), buffer)
+    const relPath = await uploadBuffer(buffer, filename, 'pagina/home')
 
     if (id) await pool.query('UPDATE p_home SET contenido = $1, updated_at = now() WHERE id_home = $2', [relPath, id])
 
@@ -119,15 +112,14 @@ export const createCarruselItem = async (req, res) => {
     if (!id_home) return res.status(400).json({ ok: false, message: 'id_home requerido' })
     await ensureDirs()
     let relPath = null
-    if (imageDataUrl) {
+      if (imageDataUrl) {
       const matches = imageDataUrl.match(/^data:(image\/\w+);base64,(.+)$/)
       if (!matches) return res.status(400).json({ ok: false, message: 'Formato de imagen no válido' })
       const ext = matches[1].split('/')[1] || 'jpg'
       const buffer = Buffer.from(matches[2], 'base64')
       if (buffer.length > MAX_UPLOAD_BYTES) return res.status(413).json({ ok: false, message: 'Imagen demasiado grande' })
       const filename = `carrusel-${Date.now()}.${ext}`
-      relPath = `/uploads/pagina/home/carrusel/${filename}`
-      await fs.promises.writeFile(path.join(UPLOADS_HOME_CAR_DIR, filename), buffer)
+      relPath = await uploadBuffer(buffer, filename, 'pagina/home/carrusel')
     }
     const q = 'INSERT INTO p_home_carrusel (id_home, ubicacion, estatus, orden) VALUES ($1,$2,$3,$4) RETURNING *'
     const r = await pool.query(q, [id_home, relPath, estatus, orden])

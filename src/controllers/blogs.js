@@ -1,6 +1,8 @@
 import fs from 'fs'
 import path from 'path'
 import pool from '../config/db.js'
+import { buildImageUrl } from '../utils/image.js'
+import { uploadBuffer } from '../utils/uploader.js'
 
 const UPLOADS_BLOGS_DIR = path.join(process.cwd(), 'uploads', 'blogs')
 const ensureUploadsDir = async () => {
@@ -10,15 +12,7 @@ const ensureUploadsDir = async () => {
 const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_MB || 20) * 1024 * 1024
 
 // ── helpers ───────────────────────────────────────────────────────────
-const buildImageUrl = (req, imgPath) => {
-  if (!imgPath) return null
-  if (imgPath.startsWith('http')) return imgPath
-  // Prefer explicit SITE_URL env var when present (e.g. https://sena.mx)
-  const siteUrl = process.env.SITE_URL
-  if (siteUrl) return siteUrl.replace(/\/$/, '') + (imgPath.startsWith('/') ? imgPath : '/' + imgPath)
-  const proto = (req && (req.headers['x-forwarded-proto'] || req.protocol)) || 'https'
-  return `${proto}://${req.get('host')}${imgPath.startsWith('/') ? '' : '/'}${imgPath}`
-}
+// Using buildImageUrl from ../utils/image.js
 
 const slugify = (text) =>
   text
@@ -331,15 +325,14 @@ export const deleteImage = async (req, res) => {
 
 // ── Utilidad interna para guardar imagen ──────────────────────────────
 async function saveImage(postId, dataUrl) {
-  await ensureUploadsDir()
   const matches = dataUrl.match(/^data:(image\/\w+);base64,(.+)$/)
   if (!matches) throw new Error('Formato de imagen no válido')
   const ext = matches[1].split('/')[1] || 'jpg'
   const buffer = Buffer.from(matches[2], 'base64')
   if (buffer.length > MAX_UPLOAD_BYTES) throw new Error('FILE_TOO_LARGE')
   const filename = `${postId}-${Date.now()}.${ext}`
-  const relPath = `/uploads/blogs/${filename}`
-  await fs.promises.writeFile(path.join(UPLOADS_BLOGS_DIR, filename), buffer)
+  // Upload to remote (cPanel) and get public path
+  const relPath = await uploadBuffer(buffer, filename, 'blogs')
   await pool.query('UPDATE blog_posts SET featured_image = $1, updated_at = now() WHERE id = $2', [relPath, postId])
   return relPath
 }
